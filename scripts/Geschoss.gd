@@ -53,6 +53,8 @@ static func neu(pos: Vector3, richtung: Vector3, tempo: float, p_schaden: float,
 
 
 func _ready() -> void:
+	if vom_spieler:
+		add_to_group("spieler_geschoss")      # Gegner sehen sie kommen und weichen aus
 	_ausrichten()
 
 
@@ -70,8 +72,11 @@ func _physics_process(dt: float) -> void:
 	var treffer := get_world_3d().direct_space_state.intersect_ray(q)
 	if not treffer.is_empty():
 		var obj: Object = treffer.collider
-		if obj != null and obj.has_method("treffer") and flaeche <= 0.0:
-			obj.treffer(schaden)
+		if obj != null and flaeche <= 0.0:
+			if obj.has_method("treffer_von"):
+				obj.treffer_von(schaden, geschw)
+			elif obj.has_method("treffer"):
+				obj.treffer(schaden)
 		var groesse := knall if knall > 0.0 else (4.0 if lenkung > 0.0 else 1.2)
 		Effekte.explosion(get_parent(), treffer.position, farbe, groesse)
 		if flaeche > 0.0:

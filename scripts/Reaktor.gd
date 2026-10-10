@@ -10,6 +10,8 @@ var ziel: Node3D
 var welt: Node3D
 var farbe := Color(1.0, 0.5, 0.1)
 var kaputt := false
+var geschirmt := false          ## Boss-Tiefe: unverwundbar, bis der Boss besiegt ist
+var _schirm: MeshInstance3D
 var _kern: MeshInstance3D
 var _kmat: StandardMaterial3D
 var _licht: OmniLight3D
@@ -102,8 +104,35 @@ func _physics_process(dt: float) -> void:
 		welt.add_child(Geschoss.neu(start, r, 30.0, 8.0, false, farbe, 0.0, 1.4))
 
 
+func schirm_an() -> void:
+	geschirmt = true
+	_schirm = MeshInstance3D.new()
+	var k := SphereMesh.new()
+	k.radius = 3.4
+	k.height = 6.8
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.albedo_color = Color(0.4, 0.7, 1.6, 0.22)
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	k.material = m
+	_schirm.mesh = k
+	add_child(_schirm)
+
+
+func schirm_aus() -> void:
+	geschirmt = false
+	if _schirm:
+		_schirm.queue_free()
+		_schirm = null
+	Effekte.explosion(get_parent(), global_position, Color(0.4, 0.7, 1.0), 7.0)
+
+
 func treffer(s: float) -> void:
 	if kaputt:
+		return
+	if geschirmt:
+		Effekte.explosion(get_parent(), global_position + Vector3(0, 0, 0), Color(0.4, 0.7, 1.0), 1.0)
 		return
 	hp -= s
 	if hp <= 0.0:

@@ -19,6 +19,8 @@ var _erz: Label
 var _status: Label
 var _mitteilung: Label
 var _aufnahme: Label
+var _boss_name: Label
+var _boss_balken: ProgressBar
 var _aufnahme_tw: Tween
 var _blitz: ColorRect
 var _zeichnung: Control
@@ -85,6 +87,14 @@ func _init() -> void:
 	_mitteilung.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_ecke(_mitteilung, 0.5, 0.5, Vector2(-900, -300), Vector2(900, -80))
 	wurzel.add_child(_mitteilung)
+	_boss_name = _label("", 24, ROT)
+	_boss_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_ecke(_boss_name, 0.5, 0, Vector2(-400, 135), Vector2(400, 165))
+	wurzel.add_child(_boss_name)
+	_boss_balken = _balken(ROT)
+	_ecke(_boss_balken, 0.5, 0, Vector2(-400, 170), Vector2(400, 184))
+	wurzel.add_child(_boss_balken)
+	boss_aus()
 	_aufnahme = _label("", 30, GRUEN)
 	_aufnahme.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_ecke(_aufnahme, 0.5, 0.5, Vector2(-500, 90), Vector2(500, 140))
@@ -168,6 +178,22 @@ func mitteilung(text: String, dauer := 2.5, farbe := GELB) -> void:
 	var tw := create_tween()
 	tw.tween_interval(dauer)
 	tw.tween_property(_mitteilung, "modulate:a", 0.0, 0.8)
+
+
+func boss_an(name: String) -> void:
+	_boss_name.text = name
+	_boss_name.visible = true
+	_boss_balken.visible = true
+
+
+func boss_wert(hp: float, hp_max: float) -> void:
+	_boss_balken.max_value = hp_max
+	_boss_balken.value = maxf(hp, 0.0)
+
+
+func boss_aus() -> void:
+	_boss_name.visible = false
+	_boss_balken.visible = false
 
 
 ## Kurze Meldung unter dem Fadenkreuz: was eingesammelt wurde (oder dass es voll ist).

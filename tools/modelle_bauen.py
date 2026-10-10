@@ -38,6 +38,7 @@ mat("Rahmen", (0.12, 0.12, 0.13), metall=0.8, rauh=0.5)
 mat("Leuchte", (1.0, 0.2, 0.1), leucht=4.0)
 mat("Duese", (1.0, 0.55, 0.2), leucht=3.0)
 mat("Mine", (1.0, 0.45, 0.1), leucht=2.0)
+mat("Schild", (0.3, 0.6, 1.0), leucht=1.5, metall=0.0, rauh=0.1)
 
 
 def _fertig(o, wurzel, m, fase, glatt=False):
@@ -239,10 +240,8 @@ def minenleger():
 # ---------------------------------------------------------------- Tarnroboter
 def tarn():
     w = wurzel("tarn")
-    zyl(w, "Rumpf", 0.55, 1.9, (0, 0.05, 0), rot=(-90, 0, 0), m="Panzer", ecken=4, r2=0.04, fase=0.02)
-    bpy.data.objects["Rumpf"].scale = (1.35, 1.0, 0.55)
-    zyl(w, "Heck", 0.42, 0.5, (0, -0.95, 0), rot=(90, 0, 0), m="Rahmen", ecken=4, r2=0.2, fase=0.02)
-    bpy.data.objects["Heck"].scale = (1.35, 1.0, 0.55)
+    zyl(w, "Rumpf", 0.55, 1.9, (0, 0.05, 0), rot=(-90, 0, 0), m="Panzer", ecken=4, r2=0.04, fase=0.02).scale = (1.35, 1.0, 0.55)
+    zyl(w, "Heck", 0.42, 0.5, (0, -0.95, 0), rot=(90, 0, 0), m="Rahmen", ecken=4, r2=0.2, fase=0.02).scale = (1.35, 1.0, 0.55)
     box(w, "Auge", (0.34, 0.05, 0.06), (0, 0.42, 0.17), rot=(-15, 0, 0), m="Leuchte", fase=0)
     for s in (1, -1):
         box(w, f"Fluegel{s}", (1.3, 0.62, 0.05), (s * 0.68, -0.35, -0.02), rot=(0, s * -6, s * 22),
@@ -254,7 +253,158 @@ def tarn():
     return w
 
 
-BAUER = {"jaeger": jaeger, "geschuetz": geschuetz, "waechter": waechter, "minenleger": minenleger, "tarn": tarn}
+# ---------------------------------------------------------------- Schildträger
+def schildtraeger():
+    w = wurzel("schildtraeger")
+    box(w, "Rumpf", (1.1, 1.2, 1.0), (0, -0.2, 0), fase=0.1)
+    zyl(w, "Schild", 1.25, 0.12, (0, 0.75, 0), rot=(90, 0, 0), m="Schild", ecken=20, fase=0.03)
+    ring(w, "Schildrand", 1.25, 0.07, (0, 0.75, 0), rot=(90, 0, 0), seg=32)
+    for s in (1, -1):
+        zyl(w, f"Emitter{s}", 0.13, 0.5, (s * 0.65, 0.35, 0), rot=(90, 0, 0))
+        zyl(w, f"Kanone{s}", 0.09, 0.7, (s * 0.72, 0.2, -0.55), rot=(90, 0, 0), m="Panzer", ecken=10)
+        box(w, f"Seite{s}", (0.1, 1.0, 0.8), (s * 0.6, -0.25, 0), fase=0.03)
+        zyl(w, f"Duese{s}", 0.14, 0.05, (s * 0.3, -0.85, -0.2), rot=(90, 0, 0), m="Duese", fase=0)
+    box(w, "Sensor", (0.3, 0.2, 0.2), (0, 0.15, 0.62), m="Rahmen", fase=0.03)
+    kugel(w, "Auge", 0.1, (0, 0.27, 0.62))
+    return w
+
+
+# ---------------------------------------------------------------- Kamikaze
+def kamikaze():
+    w = wurzel("kamikaze")
+    kugel(w, "Kern", 0.6, (0, 0, 0), m="Panzer", seg=16, ringe=10)
+    ring(w, "Augenring", 0.62, 0.06, (0, 0.05, 0), rot=(90, 0, 0), m="Leuchte")
+    for i, (x, y, z) in enumerate([(1, 0, 0), (-1, 0, 0), (0, 0, 1), (0, 0, -1), (0, 1, 0),
+                                    (0.7, 0.7, 0.7), (-0.7, 0.7, 0.7), (0.7, 0.7, -0.7), (-0.7, 0.7, -0.7)]):
+        l = math.sqrt(x * x + y * y + z * z)
+        x, y, z = x / l, y / l, z / l
+        rx = math.degrees(math.acos(max(-1, min(1, z))))
+        rz = math.degrees(math.atan2(x, -y)) if (x or y) else 0
+        zyl(w, f"Dorn{i}", 0.12, 0.55, (x * 0.75, y * 0.75, z * 0.75), rot=(rx, 0, rz), m="Rahmen", r2=0.0, ecken=8)
+    zyl(w, "Antrieb", 0.25, 0.3, (0, -0.72, 0), rot=(90, 0, 0))
+    zyl(w, "Duese", 0.18, 0.05, (0, -0.88, 0), rot=(90, 0, 0), m="Duese", fase=0)
+    return w
+
+
+# ---------------------------------------------------------------- Schwarmdrohne
+def drohne():
+    w = wurzel("drohne")
+    kugel(w, "Kern", 0.25, (0, 0, 0), m="Panzer", seg=12, ringe=8)
+    kugel(w, "Auge", 0.09, (0, 0.22, 0.02), seg=8, ringe=4)
+    for i in range(3):
+        a = R(i * 120 + 60)
+        box(w, f"Fluegel{i}", (0.55, 0.16, 0.03), (math.sin(a) * 0.38, math.cos(a) * 0.38, 0),
+            rot=(0, 0, -i * 120 - 60), m="Rahmen", fase=0.01)
+        zyl(w, f"Duese{i}", 0.04, 0.03, (math.sin(a) * 0.62, math.cos(a) * 0.62 - 0.05, 0), rot=(90, 0, 0), m="Duese", fase=0, ecken=8)
+    return w
+
+
+# ---------------------------------------------------------------- Teleporter
+def teleporter():
+    w = wurzel("teleporter")
+    kugel(w, "Kristall", 0.65, (0, 0, 0), m="Panzer", seg=4, ringe=2, streck=(1, 1, 1.5))
+    ring(w, "Ring1", 0.95, 0.05, (0, 0, 0), rot=(90, 0, 0))
+    ring(w, "Ring2", 0.95, 0.05, (0, 0, 0), rot=(0, 90, 0))
+    kugel(w, "Auge", 0.18, (0, 0.55, 0.1), seg=10, ringe=6)
+    for s in (1, -1):
+        zyl(w, f"Spitze{s}", 0.12, 0.5, (0, 0, s * 1.15), rot=(0 if s > 0 else 180, 0, 0), m="Leuchte", r2=0.0, ecken=6)
+    return w
+
+
+# ---------------------------------------------------------------- Dieb
+def dieb():
+    w = wurzel("dieb")
+    zyl(w, "Rumpf", 0.35, 1.5, (0, 0, 0), rot=(-90, 0, 0), m="Panzer", ecken=8, r2=0.18, fase=0.02)
+    kugel(w, "Auge", 0.12, (0, 0.72, 0.1), seg=10, ringe=6)
+    for s in (1, -1):
+        box(w, f"Arm{s}", (0.08, 0.7, 0.08), (s * 0.4, 0.45, -0.1), rot=(0, 0, s * -20), m="Rahmen", fase=0.01)
+        box(w, f"Klaue{s}a", (0.06, 0.25, 0.06), (s * 0.55, 0.85, -0.05), rot=(20, 0, s * 30), m="Rahmen", fase=0)
+        box(w, f"Klaue{s}b", (0.06, 0.25, 0.06), (s * 0.55, 0.85, -0.2), rot=(-20, 0, s * 30), m="Rahmen", fase=0)
+        box(w, f"Finne{s}", (0.6, 0.35, 0.04), (s * 0.4, -0.5, 0), rot=(0, s * 10, s * 15), m="Panzer", fase=0.01)
+    zyl(w, "Duese", 0.15, 0.05, (0, -0.78, 0), rot=(90, 0, 0), m="Duese", fase=0)
+    box(w, "Beutel", (0.4, 0.35, 0.3), (0, -0.1, -0.35), m="Mine", fase=0.05)
+    return w
+
+
+# ---------------------------------------------------------------- Reparierer
+def reparierer():
+    w = wurzel("reparierer")
+    kugel(w, "Koerper", 0.6, (0, 0, 0), m="Panzer", seg=16, ringe=8, streck=(1, 1, 0.6))
+    box(w, "Kreuz1", (0.6, 0.18, 0.1), (0, 0, 0.42), m="Leuchte", fase=0)
+    box(w, "Kreuz2", (0.18, 0.6, 0.1), (0, 0, 0.42), m="Leuchte", fase=0)
+    for i in range(4):
+        a = R(i * 90 + 45)
+        box(w, f"Arm{i}", (0.7, 0.1, 0.1), (math.sin(a) * 0.75, math.cos(a) * 0.75, 0), rot=(0, 0, -i * 90 - 45), m="Rahmen", fase=0.01)
+        zyl(w, f"Duese{i}", 0.12, 0.2, (math.sin(a) * 1.1, math.cos(a) * 1.1, 0), m="Duese", fase=0.01)
+    kugel(w, "Auge", 0.12, (0, 0.55, 0.05), seg=10, ringe=6)
+    return w
+
+
+# ---------------------------------------------------------------- Bosse
+def boss_koloss():
+    w = wurzel("boss_koloss")
+    box(w, "Kern", (3.4, 3.0, 3.0), (0, 0, 0), fase=0.25)
+    box(w, "Brust", (2.8, 0.25, 2.2), (0, 1.6, 0.1), fase=0.1)
+    box(w, "Visierrahmen", (2.2, 0.2, 0.6), (0, 1.75, 0.75), m="Rahmen", fase=0.06)
+    box(w, "Visier", (1.9, 0.1, 0.3), (0, 1.84, 0.75), m="Leuchte", fase=0)
+    for i in range(6):
+        box(w, f"Rippe{i}", (0.25, 0.1, 1.0), (-1.0 + i * 0.4, 1.78, -0.45), m="Rahmen", fase=0.02)
+    for s in (1, -1):
+        box(w, f"Schulter{s}", (1.2, 2.4, 1.1), (s * 2.2, 0, 1.0), rot=(0, s * 15, 0), fase=0.15, verjuengt=(0.85, 0.8))
+        for z in (0.4, -0.5):
+            zyl(w, f"Kanone{s}{z}", 0.28, 1.6, (s * 2.25, 1.3, z), rot=(90, 0, 0), m="Rahmen", ecken=14)
+            zyl(w, f"Muendung{s}{z}", 0.2, 0.06, (s * 2.25, 2.12, z), rot=(90, 0, 0), m="Leuchte", fase=0)
+        box(w, f"Panzerplatte{s}", (0.2, 2.2, 1.9), (s * 1.75, 0, -0.3), fase=0.05)
+        for z in (0.8, 0, -0.8):
+            zyl(w, f"Triebwerk{s}{z}", 0.35, 0.6, (s * 0.9, -1.8, z), rot=(90, 0, 0))
+            zyl(w, f"Duese{s}{z}", 0.25, 0.05, (s * 0.9, -2.12, z), rot=(90, 0, 0), m="Duese", fase=0)
+        for y in (1.1, -1.1):
+            zyl(w, f"Dorn{s}{y}", 0.25, 0.8, (s * 1.4, y, -1.85), rot=(180, 0, 0), r2=0.0, ecken=8)
+    box(w, "Turm", (1.0, 1.0, 0.5), (0, -0.4, 1.75), m="Rahmen", fase=0.06)
+    for s in (1, -1):
+        zyl(w, f"Antenne{s}", 0.04, 1.4, (s * 0.35, -0.5, 2.6), ecken=6, fase=0)
+    return w
+
+
+def boss_brutmutter():
+    w = wurzel("boss_brutmutter")
+    kugel(w, "Leib", 2.2, (0, 0, 0), m="Panzer", seg=28, ringe=14, streck=(1, 1, 0.65))
+    ring(w, "Guertel", 2.25, 0.18, (0, 0, 0), seg=40)
+    kugel(w, "Kuppel", 1.0, (0, 0, 1.1), m="Rahmen", seg=20, ringe=10, streck=(1, 1, 0.6))
+    kugel(w, "Auge", 0.45, (0, 1.75, 0.5), seg=16, ringe=8)
+    zyl(w, "Augenfassung", 0.55, 0.3, (0, 1.65, 0.5), rot=(90, 0, 0))
+    for i in range(6):
+        a = R(i * 60 + 30)
+        x, y = math.sin(a) * 2.35, math.cos(a) * 2.35
+        kugel(w, f"Brutkammer{i}", 0.55, (x, y, -0.2), m="Rahmen", seg=12, ringe=8)
+        kugel(w, f"Brutlicht{i}", 0.25, (x * 1.12, y * 1.12, -0.2), m="Mine", seg=10, ringe=6)
+    for i in range(4):
+        a = R(i * 90)
+        zyl(w, f"Bein{i}", 0.12, 1.8, (math.sin(a) * 1.3, math.cos(a) * 1.3, -1.6),
+            rot=(math.cos(a) * 25, -math.sin(a) * 25, 0), ecken=8)
+    return w
+
+
+def boss_phantom():
+    w = wurzel("boss_phantom")
+    zyl(w, "Rumpf", 1.6, 4.2, (0, 0.2, 0), rot=(-90, 0, 0), m="Panzer", ecken=4, r2=0.1, fase=0.04).scale = (1.4, 1.0, 0.5)
+    zyl(w, "Heck", 1.1, 1.2, (0, -2.3, 0), rot=(90, 0, 0), m="Rahmen", ecken=4, r2=0.5, fase=0.04).scale = (1.4, 1.0, 0.5)
+    box(w, "Auge", (1.0, 0.1, 0.12), (0, 1.3, 0.38), rot=(-15, 0, 0), m="Leuchte", fase=0)
+    ring(w, "Halo", 2.7, 0.08, (0, -0.4, 0.6), m="Leuchte", seg=48)
+    for s in (1, -1):
+        box(w, f"Fluegel{s}", (3.0, 1.6, 0.1), (s * 1.9, -0.9, -0.05), rot=(0, s * -8, s * 24), fase=0.02)
+        box(w, f"Spitze{s}", (0.08, 1.1, 0.8), (s * 3.3, -1.5, 0.1), rot=(0, s * 15, s * 24), m="Rahmen", fase=0.01)
+        box(w, f"Leitwerk{s}", (0.08, 1.2, 1.0), (s * 0.6, -2.4, 0.6), rot=(0, s * 30, 0), m="Rahmen", fase=0.01)
+        for x in (0.4, 0.9):
+            zyl(w, f"Duese{s}{x}", 0.2, 0.06, (s * x, -2.95, 0), rot=(90, 0, 0), m="Duese", fase=0, ecken=12)
+        zyl(w, f"Lanze{s}", 0.07, 1.6, (s * 1.2, 1.2, -0.15), rot=(90, 0, 0), m="Rahmen", ecken=8)
+    return w
+
+
+BAUER = {"jaeger": jaeger, "geschuetz": geschuetz, "waechter": waechter, "minenleger": minenleger, "tarn": tarn,
+         "schildtraeger": schildtraeger, "kamikaze": kamikaze, "drohne": drohne, "teleporter": teleporter,
+         "dieb": dieb, "reparierer": reparierer,
+         "boss_koloss": boss_koloss, "boss_brutmutter": boss_brutmutter, "boss_phantom": boss_phantom}
 wurzeln = {}
 for name, f in BAUER.items():
     w = f()
@@ -276,12 +426,13 @@ for name, f in BAUER.items():
 
 if VORSCHAU:
     for i, (name, w) in enumerate(wurzeln.items()):
-        w.location = ((i - 2) * 3.4, 0, 0)
+        spalte, reihe = i % 5, i // 5
+        w.location = ((spalte - 2) * 5.5, 0, -reihe * 6.0)
         w.rotation_euler = (0, 0, R(-35))
     cam = bpy.data.objects.new("Kamera", bpy.data.cameras.new("Kamera"))
     bpy.context.collection.objects.link(cam)
-    cam.location = (0, 19.0, 5.6)
-    cam.rotation_euler = (R(76), 0, R(180))
+    cam.location = (0, 34.0, 4.0)
+    cam.rotation_euler = (R(80), 0, R(180))
     cam.data.lens = 34
     bpy.context.scene.camera = cam
     sz = bpy.context.scene
@@ -291,7 +442,7 @@ if VORSCHAU:
     sz.display.shading.show_cavity = True
     sz.display.shading.show_object_outline = True
     sz.render.resolution_x = 1800
-    sz.render.resolution_y = 560
+    sz.render.resolution_y = 1100
     sz.render.filepath = VORSCHAU
     bpy.ops.render.render(write_still=True)
     print("VORSCHAU", VORSCHAU)

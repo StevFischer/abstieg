@@ -7,6 +7,7 @@ extends RefCounted
 ## Zelle c hat ihren Mittelpunkt bei c * ZELLE und reicht ZELLE/2 in jede Richtung.
 
 const ZELLE := 6.0
+const BOSS_RAUM := Vector3i(5, 3, 5)
 const RICHTUNGEN: Array[Vector3i] = [
 	Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0),
 	Vector3i(0, -1, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1)]
@@ -39,10 +40,18 @@ func erzeuge(p_saat: int, p_tiefe: int) -> void:
 		versuche += 1
 		_anbauen()
 	_reaktor_waehlen()
+	if ist_boss_tiefe(p_tiefe):
+		# Großer Bossraum am tiefsten Punkt des Baums: dort steht der Reaktor mit seinem Wächter.
+		var tiefster := reaktor_raum
+		for i in 600:
+			var quelle := tiefster if i < 300 else rng.randi_range(0, raeume.size() - 1)
+			if _anbauen(BOSS_RAUM, quelle):
+				reaktor_raum = raeume.size() - 1
+				break
 
 
-func _anbauen() -> void:
-	var qi := rng.randi_range(0, raeume.size() - 1)
+func _anbauen(fest := Vector3i.ZERO, quelle := -1) -> bool:
+	var qi := quelle if quelle >= 0 else rng.randi_range(0, raeume.size() - 1)
 	var r1: Vector3i = ZUG_RICHTUNGEN[rng.randi_range(0, ZUG_RICHTUNGEN.size() - 1)]
 	var weg: Array[Vector3i] = []
 	var p := _randzelle(raeume[qi], r1)
@@ -59,6 +68,8 @@ func _anbauen() -> void:
 	var groesse := Vector3i(rng.randi_range(2, 4), rng.randi_range(1, 3), rng.randi_range(2, 4))
 	if rng.randf() < 0.12:
 		groesse = Vector3i(rng.randi_range(4, 6), rng.randi_range(3, 4), rng.randi_range(4, 6))
+	if fest != Vector3i.ZERO:
+		groesse = fest
 	var ein := p + r_ende
 	var pos := Vector3i.ZERO
 	for a in 3:
@@ -71,14 +82,15 @@ func _anbauen() -> void:
 	# Ein Stollen darf fremde Stollen kreuzen, aber keinen Raum durchstoßen.
 	for z in weg:
 		if zellen.has(z) and zellen[z] >= 0:
-			return
+			return false
 	# Der neue Raum samt einer Zelle Rand muss frei sein.
 	for x in range(pos.x - 1, pos.x + groesse.x + 1):
 		for y in range(pos.y - 1, pos.y + groesse.y + 1):
 			for z in range(pos.z - 1, pos.z + groesse.z + 1):
 				if zellen.has(Vector3i(x, y, z)):
-					return
+					return false
 	_raum_setzen(pos, groesse, qi, weg)
+	return true
 
 
 func _raum_setzen(pos: Vector3i, groesse: Vector3i, eltern: int, weg: Array[Vector3i]) -> void:
@@ -135,6 +147,9 @@ func _reaktor_waehlen() -> void:
 
 
 # --- Abfragen -------------------------------------------------------------
+
+static func ist_boss_tiefe(t: int) -> bool:
+	return t % 5 == 0
 
 func mitte(i: int) -> Vector3:
 	var r := raeume[i]

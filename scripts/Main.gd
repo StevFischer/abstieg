@@ -7,6 +7,7 @@ var spiel: Node3D
 var schiff: Schiff
 var level: Node3D
 var reaktor: Reaktor
+var boss: Gegner
 var ausgang: Ausgang
 var hud: HUD
 var hangar: Hangar
@@ -164,15 +165,24 @@ func _lade_level() -> void:
 
 func _gegner_setzen() -> int:
 	var zahl := 0
+	# Wer ab welcher Tiefe dazukommt. Dieb und Reparierer sind Einzelgänger (höchstens 2 je Mine).
 	var pool := ["jaeger", "jaeger", "geschuetz"]
+	if tiefe >= 2:
+		pool.append("kamikaze")
 	if tiefe >= 3:
 		pool.append("waechter")
+	if tiefe >= 4:
+		pool.append("schildtraeger")
 	if tiefe >= 5:
 		pool.append("minenleger")
 	if tiefe >= 6:
-		pool.append_array(["waechter", "jaeger"])
+		pool.append_array(["waechter", "jaeger", "kamikaze"])
 	if tiefe >= 8:
 		pool.append_array(["tarn", "tarn"])
+	if tiefe >= 9:
+		pool.append_array(["teleporter", "schildtraeger"])
+	var einzel := {"dieb": 0, "reparierer": 0}
+	boss = null
 	for i in gen.raeume.size():
 		if i == gen.start_raum:
 			continue
@@ -187,6 +197,19 @@ func _gegner_setzen() -> int:
 				pos = reaktor.position + (pos - reaktor.position).normalized() * 4.5
 			_gegner(pool[_rng.randi_range(0, pool.size() - 1)], pos)
 			zahl += 1
+		# Einzelgänger
+		for typ in einzel:
+			var ab: int = 6 if typ == "dieb" else 7
+			if tiefe >= ab and einzel[typ] < 2 and _rng.randf() < 0.15:
+				einzel[typ] += 1
+				_gegner(typ, LevelGen.welt_von(zellen[_rng.randi_range(0, zellen.size() - 1)]))
+				zahl += 1
+		# Schwarm: fünf Drohnen zusammen
+		if tiefe >= 3 and i != gen.reaktor_raum and _rng.randf() < 0.25:
+			var mitte := LevelGen.welt_von(zellen[_rng.randi_range(0, zellen.size() - 1)])
+			for k in 5:
+				_gegner("drohne", mitte + Vector3(_rng.randf_range(-2, 2), _rng.randf_range(-1, 1), _rng.randf_range(-2, 2)))
+			zahl += 5
 		if _rng.randf() < 0.35:
 			var art: String = ["schild", "reparatur", "energie", "rakete", "erz", "erz"][_rng.randi_range(0, 5)]
 			level.add_child(Beute.neu(art, LevelGen.welt_von(zellen[_rng.randi_range(0, zellen.size() - 1)])))
@@ -195,17 +218,57 @@ func _gegner_setzen() -> int:
 		if weg.size() >= 5 and _rng.randf() < 0.4:
 			_gegner("jaeger", LevelGen.welt_von(weg[weg.size() / 2]))
 			zahl += 1
+	if LevelGen.ist_boss_tiefe(tiefe):
+		_boss_setzen()
+		zahl += 1
 	return zahl
 
 
-func _gegner(typ: String, pos: Vector3) -> void:
+## Jede 5. Tiefe: einer von drei Bossen im Wechsel bewacht den Reaktor, der bis dahin geschirmt ist.
+func _boss_setzen() -> void:
+	var typ: String = Gegner.BOSSE[(tiefe / 5 - 1) % Gegner.BOSSE.size()]
+	var r := gen.raeume[gen.reaktor_raum]
+	var vor := (gen.mitte(gen.start_raum) - reaktor.position)
+	vor.y = 0
+	boss = _gegner(typ, reaktor.position + vor.normalized() * 9.0)
+	for z in gen.zellen_von_raum(gen.reaktor_raum):
+		var p := LevelGen.welt_von(z)
+		if p.distance_to(reaktor.position) > 6.0:
+			boss.boss_raum.append(p)
+	reaktor.schirm_an()
+	hud.boss_an(boss.boss_name())
+	Protokoll.schreib("level", "Boss %s auf Tiefe %d, Leben %.0f, Raum %s" % [boss.boss_name(), tiefe, boss.hp, r.groesse])
+
+
+func _gegner(typ: String, pos: Vector3) -> Gegner:
 	var g := Gegner.new()
 	g.einrichten(typ, tiefe)
 	g.position = pos
 	g.ziel = schiff
 	g.welt = level
 	g.zerstoert.connect(_gegner_weg)
-	level.add_child(g)
+	g.verstaerkung.connect(func(t: String, p: Vector3, von: Gegner):
+		var neu := _gegner(t, p)
+		neu.alarmieren(schiff.global_position)
+		if von.typ == "boss_brutmutter":
+			neu.add_to_group("brut"))
+	g.klaut.connect(_dieb_klaut)
+	g.phase_zwei.connect(func(b: Gegner):
+		hud.mitteilung("%s — PHASE 2" % b.boss_name(), 1.8, HUD.ROT)
+		Protokoll.schreib("level", "Boss %s Phase 2" % b.boss_name()))
+	if Engine.is_in_physics_frame():      # aus einem Gegner-Physikschritt heraus (Bossnachschub)
+		level.add_child.call_deferred(g)
+	else:
+		level.add_child(g)
+	return g
+
+
+func _dieb_klaut(g: Gegner) -> void:
+	var menge := mini(level_erz, 15 + tiefe * 3)
+	level_erz -= menge
+	g.beute = menge if menge > 0 else -1
+	hud.aufnahme("DIEB! −%d ERZ — abschießen holt es zurück" % menge if menge > 0 else "DIEB! (nichts zu holen)", HUD.ROT)
+	Protokoll.schreib("level", "Dieb klaut %d Erz auf Tiefe %d" % [menge, tiefe])
 
 
 func _umgebung_setzen() -> void:
@@ -225,8 +288,19 @@ func _umgebung_setzen() -> void:
 
 
 func _gegner_weg(g: Gegner) -> void:
-	var b := Beute.neu("erz", g.global_position, g.erz)
-	level.add_child.call_deferred(b)
+	if g.erz > 0 and not g.ist_boss:
+		level.add_child.call_deferred(Beute.neu("erz", g.global_position, g.erz))
+	if g.beute > 0:
+		level.add_child.call_deferred(Beute.neu("erz", g.global_position + Vector3(0, 0.8, 0), g.beute))
+	if g.ist_boss:
+		for i in 8:     # Bossbeute: ein Kranz aus Erz
+			var p := g.global_position + Vector3(cos(TAU * i / 8.0), 0.3 * (i % 2), sin(TAU * i / 8.0)) * 2.5
+			level.add_child.call_deferred(Beute.neu("erz", p, g.erz / 8))
+		reaktor.schirm_aus()
+		hud.boss_aus()
+		hud.mitteilung("%s BESIEGT\nReaktor ungeschützt" % g.boss_name(), 2.5, HUD.GELB)
+		Protokoll.schreib("level", "Boss %s besiegt auf Tiefe %d" % [g.boss_name(), tiefe])
+		boss = null
 	if _rng.randf() < 0.2:
 		var art: String = ["schild", "reparatur", "energie", "rakete"][_rng.randi_range(0, 3)]
 		level.add_child.call_deferred(Beute.neu(art, g.global_position + Vector3(0, 1.2, 0)))
@@ -301,6 +375,8 @@ func _process(dt: float) -> void:
 			_schiff_tot("Die Mine ist explodiert")
 			return
 	hud.setze_erz(level_erz, lauf_erz, Meta.bank)
+	if boss != null and is_instance_valid(boss):
+		hud.boss_wert(boss.hp, boss.hp_max)
 	_leitstrahl(dt)
 	hud.werte(schiff)
 
@@ -437,8 +513,15 @@ func _autotest() -> void:
 	klang.speichern()
 	_starte_lauf()
 	schiff.unverwundbar = true
+	# Der Autopilot prüft, ob die Mine befliegbar ist — Roboter im Weg (etwa ein Geschütz im Stollen,
+	# belegt 2026-10-10 auf Tiefe 16) würde ein Spieler abschießen; der Autopilot fliegt hindurch.
+	schiff.collision_mask = 1
 	if "--zeige-waffen" in OS.get_cmdline_user_args():
 		await _waffen_schau()
+		get_tree().quit(0)
+		return
+	if "--zeige-gegner2" in OS.get_cmdline_user_args():
+		await _gegner_schau2()
 		get_tree().quit(0)
 		return
 	if "--zeige-gegner" in OS.get_cmdline_user_args():
@@ -475,6 +558,21 @@ func _autotest() -> void:
 			Protokoll.schreib("test", "Nach 130 Schaden: Schild %.0f, Hülle %.0f" % [schiff.schild, schiff.huelle])
 			await _warte(0.6)
 			_foto("tiefe%d_0_huelle" % t)
+		if boss != null and is_instance_valid(boss):
+			var b := boss
+			var vorher := reaktor.hp
+			reaktor.treffer(500.0)
+			var geschuetzt := reaktor.hp == vorher
+			b.treffer(b.hp - b.hp_max * 0.45)
+			await _warte(2.5)
+			_foto("tiefe%d_boss_phase2" % t)
+			var phase_ok := is_instance_valid(b) and b.phase == 2
+			b.treffer(1.0e9)
+			await _warte(0.5)
+			var frei := not reaktor.geschirmt
+			Protokoll.schreib("test", "Boss Tiefe %d: Reaktor geschirmt %s, Phase 2 %s, nach Sieg Schirm weg %s → %s" % [
+				t, geschuetzt, phase_ok, frei, "ok" if geschuetzt and phase_ok and frei else "FEHLER"])
+			ok = ok and geschuetzt and phase_ok and frei
 		# Zum Reaktor: Pfad bis kurz vor den Kern, der Autopilot würde sonst gegen ihn drücken.
 		var weg := gen.pfad(gen.naechste_zelle(schiff.global_position), gen.naechste_zelle(reaktor.global_position))
 		for z in weg:
@@ -612,6 +710,130 @@ func _waffen_schau() -> void:
 		Protokoll.schreib("test", "Waffe %-14s %3d Geschosse, Schaden %6.0f, getroffene Ziele %d%s" % [
 			w.name, schuesse, schaden, getroffen, (", Splitter %d" % splitter_max) if splitter_max > 0 else ""])
 	Protokoll.schreib("test", "Schiffswerte: Schild %d / %d" % [schiff.schild, schiff.schild_max])
+
+
+func _testgegner(typ: String, pos: Vector3, physik: bool) -> Gegner:
+	var g := _gegner(typ, pos)
+	g.look_at(schiff.global_position, Vector3.UP)
+	g.set_physics_process(physik)
+	return g
+
+
+## Neue Gegner: Bilder aller Modelle, dann jedes Verhalten einzeln gemessen.
+func _gegner_schau2() -> void:
+	for g in get_tree().get_nodes_in_group("gegner"):
+		g.free()
+	await _warte(3.5)
+	var vor := -schiff.global_basis.z
+	var rechts := schiff.global_basis.x
+	var start := schiff.global_transform
+	for typ in ["schildtraeger", "kamikaze", "drohne", "teleporter", "dieb", "reparierer",
+			"boss_koloss", "boss_brutmutter", "boss_phantom"]:
+		var abst := 13.0 if typ.begins_with("boss") else (3.5 if typ == "drohne" else 5.0)
+		var g := _testgegner(typ, schiff.global_position + vor * abst + Vector3(0, 0.4, 0), false)
+		g.rotate_y(0.7)
+		if typ.begins_with("boss"):
+			hud.boss_an(g.boss_name())
+			hud.boss_wert(g.hp * 0.7, g.hp_max)
+		schiff.global_position += Vector3(0, 1.4, 0) + vor * 0.8
+		schiff.look_at(g.global_position, Vector3.UP)
+		await _warte(0.8)
+		_foto("neu_%s" % typ)
+		schiff.global_transform = start
+		hud.boss_aus()
+		g.free()
+	var erg := []
+	# 1 Schildträger
+	var st := _testgegner("schildtraeger", schiff.global_position + vor * 8.0, false)
+	await _warte(0.2)
+	var h0 := st.hp
+	st.treffer_von(20.0, st.global_position - schiff.global_position)       # Schuss vom Schiff aus: von vorn
+	var vorn_geblockt := st.hp == h0
+	st.treffer_von(20.0, schiff.global_position - st.global_position)       # von hinten
+	var hinten_trifft := st.hp < h0
+	erg.append("Schildträger vorn geblockt %s, hinten Schaden %s" % [vorn_geblockt, hinten_trifft])
+	st.free()
+	# 2 Kamikaze
+	schiff.unverwundbar = false
+	schiff.schild = schiff.schild_max
+	var k := _testgegner("kamikaze", schiff.global_position + vor * 16.0, true)
+	var vorher := schiff.schild + schiff.huelle
+	var t0 := Time.get_ticks_msec()
+	while is_instance_valid(k) and Time.get_ticks_msec() - t0 < 6000:
+		await get_tree().physics_frame
+	erg.append("Kamikaze explodiert %s nach %.1f s, Schaden am Schiff %.0f" % [
+		not is_instance_valid(k), (Time.get_ticks_msec() - t0) / 1000.0, vorher - schiff.schild - schiff.huelle])
+	schiff.unverwundbar = true
+	if is_instance_valid(k):
+		k.free()
+	# 3 Teleporter
+	var tp := _testgegner("teleporter", schiff.global_position + vor * 14.0, true)
+	var sprung := 0.0
+	var alt := tp.global_position
+	t0 = Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < 7000 and is_instance_valid(tp):
+		await get_tree().physics_frame
+		sprung = maxf(sprung, tp.global_position.distance_to(alt))
+		alt = tp.global_position
+	erg.append("Teleporter größter Sprung je Bild %.1f m" % sprung)
+	if is_instance_valid(tp):
+		tp.free()
+	# 4 Dieb
+	level_erz = 60
+	var d := _testgegner("dieb", schiff.global_position + vor * 12.0, true)
+	t0 = Time.get_ticks_msec()
+	while d.beute == 0 and Time.get_ticks_msec() - t0 < 6000:
+		await get_tree().physics_frame
+	var nach_klau := level_erz
+	var nah := d.global_position.distance_to(schiff.global_position)
+	await _warte(2.0)
+	var flucht := d.global_position.distance_to(schiff.global_position)
+	var gestohlen := d.beute
+	d.treffer(1.0e9)
+	await _warte(0.3)
+	var zurueck := 0
+	for b in get_tree().get_nodes_in_group("beute_erz"):
+		if b.menge == gestohlen:
+			zurueck = b.menge
+	erg.append("Dieb: Erz 60 → %d, Abstand beim Klau %.0f m, 2 s später %.0f m, abgeschossen: %d Erz liegen bereit" % [
+		nach_klau, nah, flucht, zurueck])
+	# 5 Reparierer
+	var patient := _testgegner("waechter", schiff.global_position + vor * 10.0, false)
+	patient.hp = patient.hp_max * 0.4
+	var hp_vor := patient.hp
+	var rep := _testgegner("reparierer", schiff.global_position + vor * 15.0 + rechts * 3.0, true)
+	rep.alarmieren(schiff.global_position)
+	await _warte(3.0)
+	_foto("neu_heilstrahl")
+	await _warte(1.0)
+	erg.append("Reparierer: Wächter %.0f → %.0f Leben" % [hp_vor, patient.hp])
+	patient.free()
+	rep.free()
+	# 6 Verstärkung rufen
+	var gruppe := []
+	for i in 3:
+		gruppe.append(_testgegner("jaeger", schiff.global_position + vor * 12.0 + rechts * (i - 1) * 3.0, false))
+	var rufe_vor := Gegner.rufe
+	gruppe[0]._alarm = true
+	gruppe[0]._rufen()
+	erg.append("Verstärkung: gerufen %d, alarmiert %d von 2" % [Gegner.rufe - rufe_vor, int(gruppe[1]._alarm) + int(gruppe[2]._alarm)])
+	for g in gruppe:
+		g.free()
+	# 7 Ausweichen
+	var j := _testgegner("jaeger", schiff.global_position + vor * 14.0, true)
+	j.alarmieren(schiff.global_position)
+	var aus_vor := Gegner.ausweicher
+	for i in 12:
+		if is_instance_valid(j):
+			schiff.look_at(j.global_position, Vector3.UP)
+		schiff.energie = schiff.energie_max
+		schiff.laser_schuss()
+		await _warte(0.18)
+	erg.append("Ausweichen: %d Ausweichmanöver bei 12 Schüssen" % (Gegner.ausweicher - aus_vor))
+	if is_instance_valid(j):
+		j.free()
+	for e in erg:
+		Protokoll.schreib("test", "Neue Gegner: " + e)
 
 
 ## Alle fünf Gegnertypen vor dem Schiff (Bildprüfung), danach Verhalten von Minenleger und Tarnroboter.
