@@ -33,12 +33,17 @@ static func beschriftung(p_art: String, p_menge: int) -> String:
 	return "%s +%d" % [ARTEN[p_art].name, p_menge]
 
 
+## Aufnahmekugel. Mit dem Schiffsradius 0,9 m wird Beute bis 4,6 m Mittelpunktabstand eingesammelt
+## (vorher 1,4 → 2,3 m; Stev 2026-10-10: „verdoppele die Einsammelreichweite“).
+const SAMMEL_RADIUS := 3.7
+
+
 func _ready() -> void:
 	collision_layer = 8
 	collision_mask = 2
 	var form := CollisionShape3D.new()
 	var kugel := SphereShape3D.new()
-	kugel.radius = 1.4
+	kugel.radius = SAMMEL_RADIUS
 	form.shape = kugel
 	add_child(form)
 	var farbe: Color = ARTEN[art].farbe

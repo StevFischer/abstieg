@@ -635,6 +635,10 @@ func _autotest() -> void:
 		await _gegner_schau()
 		get_tree().quit(0)
 		return
+	if "--sammel-test" in OS.get_cmdline_user_args():
+		await _sammel_test()
+		get_tree().quit(0)
+		return
 	if "--zeige-beute" in OS.get_cmdline_user_args():
 		await _beute_schau()
 		get_tree().quit(0)
@@ -1423,6 +1427,24 @@ func _gegner_schau() -> void:
 		Protokoll.schreib("test", "Mine: Schild+Hülle vorher %.0f, nachher %.0f → %s" % [
 			vorher, schiff.schild + schiff.huelle, "ok" if schiff.schild + schiff.huelle < vorher else "FEHLER"])
 		schiff.unverwundbar = true
+
+
+## Einsammelreichweite: Erz in 4,3 m (innerhalb der 4,6 m) wird aufgenommen, in 5,0 m nicht.
+func _sammel_test() -> void:
+	for g in get_tree().get_nodes_in_group("gegner"):
+		g.free()
+	await _warte(1.0)
+	schiff.velocity = Vector3.ZERO
+	var x := schiff.global_basis.x
+	var nah := Beute.neu("erz", schiff.global_position + x * 4.3)
+	var fern := Beute.neu("erz", schiff.global_position - x * 5.0)
+	level.add_child(nah)
+	level.add_child(fern)
+	await _warte(0.8)
+	var nah_weg := not is_instance_valid(nah)
+	var fern_da := is_instance_valid(fern)
+	Protokoll.schreib("test", "Einsammeln: Erz in 4,3 m aufgenommen %s, in 5,0 m liegen geblieben %s → %s" % [
+		nah_weg, fern_da, "BESTANDEN" if nah_weg and fern_da else "FEHLGESCHLAGEN"])
 
 
 ## Alle Fundstückarten nebeneinander vor dem Schiff — in 8 m und 15 m Abstand — für die Bildprüfung.
