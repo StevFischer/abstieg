@@ -24,6 +24,8 @@ var _aufnahme: Label
 var _boss_name: Label
 var _boss_balken: ProgressBar
 var _aufnahme_tw: Tween
+var _abschluss: PanelContainer
+var _abschluss_tw: Tween
 var _blitz: ColorRect
 var _zeichnung: Control
 
@@ -78,6 +80,22 @@ func _init() -> void:
 	_ecke(_boss_balken, 0.5, 0, Vector2(-400, 170), Vector2(400, 184))
 	wurzel.add_child(_boss_balken)
 	boss_aus()
+	_abschluss = PanelContainer.new()
+	var stil := StyleBoxFlat.new()
+	stil.bg_color = Color(0.02, 0.03, 0.02, 0.78)
+	stil.border_color = Color(GRUEN, 0.7)
+	stil.set_border_width_all(2)
+	stil.set_corner_radius_all(6)
+	stil.content_margin_left = 26
+	stil.content_margin_right = 26
+	stil.content_margin_top = 14
+	stil.content_margin_bottom = 16
+	_abschluss.add_theme_stylebox_override("panel", stil)
+	_abschluss.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_abschluss.visible = false
+	_ecke(_abschluss, 0.5, 0.5, Vector2(-300, 120), Vector2(300, 120))
+	_abschluss.grow_vertical = Control.GROW_DIRECTION_END
+	wurzel.add_child(_abschluss)
 	_aufnahme = _label("", 30, GRUEN)
 	_aufnahme.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_ecke(_aufnahme, 0.5, 0.5, Vector2(-500, 90), Vector2(500, 140))
@@ -222,6 +240,41 @@ func mitteilung(text: String, dauer := 2.5, farbe := GELB) -> void:
 	var tw := create_tween()
 	tw.tween_interval(dauer)
 	tw.tween_property(_mitteilung, "modulate:a", 0.0, 0.8)
+
+
+## Abrechnung nach einer geschafften Tiefe: Posten mit Betrag, unten die Summe.
+func abschluss(tiefe: int, posten: Array, summe: int) -> void:
+	for k in _abschluss.get_children():
+		k.queue_free()
+	var spalte := VBoxContainer.new()
+	spalte.add_theme_constant_override("separation", 6)
+	_abschluss.add_child(spalte)
+	var titel := _label("TIEFE %d GESCHAFFT" % tiefe, 30, GRUEN)
+	titel.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	spalte.add_child(titel)
+	for p in posten:
+		var zeile := HBoxContainer.new()
+		var links := _label(p[0], 20, Color(0.9, 0.9, 0.85))
+		links.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		zeile.add_child(links)
+		zeile.add_child(_label(p[1], 20, GELB))
+		spalte.add_child(zeile)
+	var linie := HSeparator.new()
+	spalte.add_child(linie)
+	var gesamt := HBoxContainer.new()
+	var gl := _label("In die Bank", 24, GELB)
+	gl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	gesamt.add_child(gl)
+	gesamt.add_child(_label("+%d Erz" % summe, 24, GELB))
+	spalte.add_child(gesamt)
+	_abschluss.visible = true
+	_abschluss.modulate.a = 1.0
+	if _abschluss_tw:
+		_abschluss_tw.kill()
+	_abschluss_tw = create_tween()
+	_abschluss_tw.tween_interval(4.0)
+	_abschluss_tw.tween_property(_abschluss, "modulate:a", 0.0, 0.8)
+	_abschluss_tw.tween_callback(func(): _abschluss.visible = false)
 
 
 func boss_an(name: String) -> void:

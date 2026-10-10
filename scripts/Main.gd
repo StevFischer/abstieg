@@ -325,15 +325,39 @@ func _ausgang_erreicht() -> void:
 	if zustand != "flug":
 		return
 	zustand = "wechsel"
+	# Belohnung fürs Abschließen: Abschlussbonus (in Boss-Tiefen doppelt), 1 Erz je übrige Sekunde,
+	# Schild voll, Hülle +30, Raketen +2 — und eine Abrechnung auf dem Schirm.
+	var abschluss := (15 + 8 * tiefe) * (2 if LevelGen.ist_boss_tiefe(tiefe) else 1)
+	var restzeit := maxi(int(countdown), 0)
+	var gesichert := level_erz
+	level_erz += abschluss + restzeit
 	Meta.bank += level_erz
 	lauf_erz += level_erz
 	Meta.speichern()
-	Protokoll.schreib("level", "Tiefe %d geschafft, %d Erz gesichert (Lauf %d, Bank %d), Restzeit %.0f s" % [
-		tiefe, level_erz, lauf_erz, Meta.bank, countdown])
-	tiefe += 1
-	schiff.schild = minf(schiff.schild_max, schiff.schild + 30.0)
+	var huelle_vorher := schiff.huelle
+	var raketen_vorher := schiff.raketen
+	schiff.schild = schiff.schild_max
 	schiff.huelle = minf(schiff.huelle_max, schiff.huelle + 30.0)
+	schiff.raketen = mini(schiff.raketen_max, schiff.raketen + 2)
+	hud.abschluss(tiefe, [
+		["Erz aus dieser Tiefe", "+%d" % gesichert],
+		["Abschlussbonus" + (" (Boss ×2)" if LevelGen.ist_boss_tiefe(tiefe) else ""), "+%d" % abschluss],
+		["Zeitbonus (%d s übrig)" % restzeit, "+%d" % restzeit],
+		[_auffuellung(int(schiff.huelle - huelle_vorher), schiff.raketen - raketen_vorher), ""],
+	], level_erz)
+	Protokoll.schreib("level", "Tiefe %d geschafft: Erz %d + Abschlussbonus %d + Zeitbonus %d = %d gesichert (Lauf %d, Bank %d)" % [
+		tiefe, gesichert, abschluss, restzeit, level_erz, lauf_erz, Meta.bank])
+	tiefe += 1
 	call_deferred("_lade_level")
+
+
+func _auffuellung(huelle: int, raketen: int) -> String:
+	var teile := ["Schild aufgeladen"]
+	if huelle > 0:
+		teile.append("Hülle +%d" % huelle)
+	if raketen > 0:
+		teile.append("Raketen +%d" % raketen)
+	return " · ".join(teile)
 
 
 func _schiff_tot(grund: String) -> void:
