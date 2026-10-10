@@ -74,6 +74,9 @@ const AUFRUESTUNGEN := [
 	{"id": "schildladen", "art": "ueberleben", "name": "Schildlader", "text": "+20 % Schild-Ladetempo", "kosten": 45, "max": 6, "pro": 0.20, "meister": 0.03, "boss": 0},
 	{"id": "schildpause", "art": "ueberleben", "name": "Schnellstart", "text": "Schild lädt 0,4 s früher", "kosten": 50, "max": 5, "pro": 0.4, "meister": 0.0, "boss": 0},
 	{"id": "reparatur", "art": "ueberleben", "name": "Reparaturdrohne", "text": "+10 Hülle zu Beginn jeder Tiefe", "kosten": 60, "max": 5, "pro": 10.0, "meister": 2.0, "boss": 0},
+	## Stev 2026-10-10: Notfallschild auf Taste (R / R3) lädt den Schild sofort voll; erste Stufe schaltet frei
+	## (Abklingzeit 10 min), jede weitere senkt sie um 8 % — endlos, Preis steigt gleichmäßig.
+	{"id": "schildladung", "art": "ueberleben", "name": "Notfallschild", "text": "R / rechter Stick: Schild sofort voll; Abklingzeit 10 min, jede weitere Stufe −8 %", "kosten": 250, "max": 1, "pro": 1.0, "meister": 1.0, "endlos": 0.5, "boss": 0},
 	{"id": "notschild", "art": "ueberleben", "name": "Notschild", "text": "einmal je Lauf: tödlicher Treffer → 1 Hülle, Schild voll", "kosten": 300, "max": 2, "pro": 1.0, "meister": 0.0, "boss": 15},
 	{"id": "erzausbeute", "art": "wirtschaft", "name": "Raffinerie", "text": "+10 % Erz je Fund", "kosten": 80, "max": 8, "pro": 0.10, "meister": 0.02, "boss": 5},
 	{"id": "beutechance", "art": "wirtschaft", "name": "Bergungskralle", "text": "+4 % Chance, dass Gegner Beute fallen lassen", "kosten": 70, "max": 5, "pro": 0.04, "meister": 0.005, "boss": 5},
@@ -416,6 +419,13 @@ func wert_bei(id: String, st: int) -> float:
 	return mini(st, int(a.max)) * float(a.pro) + maxi(st - int(a.max), 0) * float(a.meister)
 
 
+## Notfallschild: 0 = nicht gekauft, Stufe 1 = 600 s, jede weitere ×0,92.
+const NOTFALL_START := 600.0
+const NOTFALL_FAKTOR := 0.92
+func notfall_abklingzeit(st: int) -> float:
+	return 0.0 if st <= 0 else NOTFALL_START * pow(NOTFALL_FAKTOR, st - 1)
+
+
 ## Lesbare Gesamtwirkung bei Stufe st, z. B. „+30 % Laserschaden“ oder „Radar 35 m“.
 func wirkung_text(id: String, st: int) -> String:
 	var w := wert_bei(id, st)
@@ -430,6 +440,11 @@ func wirkung_text(id: String, st: int) -> String:
 		"magnet": return "kein Magnet" if st == 0 else "Magnet %d m" % (6 + 3 * (st - 1))
 		"nachbrenner": return "kein Nachbrenner" if st == 0 else "Abklingzeit %.1f s" % (9.0 - 1.5 * (st - 1))
 		"radar": return "kein Radar" if st == 0 else "Radar %d m" % (25 + 10 * (st - 1))
+		"schildladung":
+			if st == 0:
+				return "kein Notfallschild"
+			var sek := roundi(notfall_abklingzeit(st))
+			return "Abklingzeit %d:%02d min" % [sek / 60, sek % 60]
 		"kritisch": return "%.1f %% Chance auf doppelten Schaden" % (w * 100.0)
 		"beutechance": return "Beutechance %.1f %%" % (20.0 + w * 100.0)
 	return "+%d %%" % int(round(w * 100.0))
@@ -519,6 +534,7 @@ func schiffswerte() -> Dictionary:
 		"nachbrenner_cd": 0.0 if stufe("nachbrenner") == 0 else 9.0 - 1.5 * (stufe("nachbrenner") - 1),
 		"flucht_mult": 1.0 + wert("fluchtzeit"),
 		"radar": 0.0 if stufe("radar") == 0 else 25.0 + 10.0 * (stufe("radar") - 1),
+		"notfall_cd": notfall_abklingzeit(stufe("schildladung")),
 		"forschung": forschung.duplicate(),
 	}
 	return _module_anwenden(werte)

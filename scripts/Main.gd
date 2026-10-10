@@ -124,6 +124,9 @@ func _starte_lauf() -> void:
 	schiff.modul_gefunden.connect(func(m: Dictionary):
 		var weg := Meta.modul_hinzu(m)
 		hud.aufnahme(Module.name_von(m).to_upper() + ("  (Inventar voll: %s zerlegt)" % Module.name_von(weg) if not weg.is_empty() else ""), Module.farbe(m)))
+	schiff.notfall_ausgeloest.connect(func():
+		hud.mitteilung("NOTFALLSCHILD — SCHILD VOLL", 1.5, HUD.BLAU)
+		Protokoll.schreib("lauf", "Notfallschild auf Tiefe %d, nächstes in %.0f s" % [tiefe, schiff.notfall_cd]))
 	schiff.notschild_ausgeloest.connect(func():
 		hud.mitteilung("NOTSCHILD!", 1.8, HUD.BLAU)
 		Protokoll.schreib("lauf", "Notschild ausgelöst auf Tiefe %d, übrig %d" % [tiefe, schiff.notschild]))
@@ -623,6 +626,8 @@ func _leitstrahl(dt: float) -> void:
 func _radar() -> void:
 	hud.radar_punkte.clear()
 	var weite := float(Meta.schiffswerte().radar)
+	hud.notfall = "" if schiff.notfall_cd <= 0.0 else ("Notfallschild bereit" if schiff.notfall_rest <= 0.0 else
+		"Notfallschild %d:%02d" % [ceili(schiff.notfall_rest) / 60, ceili(schiff.notfall_rest) % 60])
 	hud.nachbrenner = "" if schiff.nachbrenner_cd <= 0.0 else (
 		"NACHBRENNER" if schiff.boost_aktiv() else (
 		"Nachbrenner bereit" if schiff.nachbrenner_bereit <= 0.0 else "Nachbrenner %d s" % ceili(schiff.nachbrenner_bereit)))
@@ -1478,9 +1483,7 @@ func _schau3() -> void:
 
 ## Früher bemerken: Gegner hinter einer Wand in Gehörweite wird alarmiert, weiter weg nicht.
 func _sicht_test() -> void:
-	Meta.start_tiefe = 1
-	_starte_lauf()
-	await _warte(1.0)
+	await _warte(1.0)       # Lauf läuft schon (Autotest-Start)
 	schiff.unverwundbar = true
 	for g in get_tree().get_nodes_in_group("gegner"):
 		g.free()
@@ -1500,7 +1503,11 @@ func _sicht_test() -> void:
 			var art := "nah" if d < Gegner.GEHOER - 2.0 and d > 6.0 else ("fern" if d > Gegner.GEHOER + 5.0 and d < 30.0 else "")
 			if art == "" or faelle.has(art):
 				continue
-			if not space.intersect_ray(PhysicsRayQueryParameters3D.create(p, sp, 1)).is_empty():
+			var verdeckt := true      # auch ±0,6 m höher/tiefer verdeckt: das Schweben darf nicht um die Kante sehen
+			for dy in [-0.6, 0.0, 0.6]:
+				if space.intersect_ray(PhysicsRayQueryParameters3D.create(p + Vector3(0, dy, 0), sp, 1)).is_empty():
+					verdeckt = false
+			if verdeckt:
 				faelle[art] = p
 		if faelle.size() == 2:
 			break
@@ -1995,12 +2002,22 @@ func _aufwertungs_test() -> void:
 	Meta.stufen = {"laserschaden": 10}
 	ok = pruef.call("Schild endlos", schild_k == [10240, 30720, 71680] and schild_w == ["Schild 250", "Schild 500", "Schild 1000"] and not (func(): Meta.stufen["schild"] = 200; var a := Meta.ausgereizt("schild"); Meta.stufen.erase("schild"); return a).call(),
 		"Meister 0/10/30: %s, Preise %s" % [", ".join(schild_w), schild_k]) and ok
+	# Notfallschild: erst kaufen (10 min), dann −8 % je Stufe, endlos
+	var nf := []
+	for st in [0, 1, 2, 11]:
+		Meta.stufen = {"schildladung": st}
+		nf.append(Meta.notfall_abklingzeit(st))
+	Meta.stufen = {"schildladung": 0}
+	var nf_k0 := Meta.kosten("schildladung")
+	Meta.stufen = {"laserschaden": 10}
+	ok = pruef.call("Notfallschild Stufen", nf[0] == 0.0 and is_equal_approx(nf[1], 600.0) and is_equal_approx(nf[2], 552.0) and absf(nf[3] - 600.0 * pow(0.92, 10)) < 0.01 and nf_k0 == 250,
+		"Abklingzeit Stufe 0/1/2/11: %s s, erste Stufe kostet %d" % [nf.map(func(x): return "%.0f" % x), nf_k0]) and ok
 	ok = pruef.call("Ohne Meister", Meta.stufen.size() == 1 and (func(): Meta.stufen["magnet"] = 3; return Meta.ausgereizt("magnet")).call(),
 		"Magnet Stufe 3/3 ausgereizt") and ok
 	# Alles auf eine Teststufe
 	Meta.stufen = {"laserschaden": 3, "feuerrate": 5, "raketenschaden": 2, "kritisch": 6, "schildladen": 5, "schildpause": 5,
 		"reparatur": 2, "notschild": 1, "erzausbeute": 5, "beutechance": 5, "magnet": 2, "abschluss": 4,
-		"nachbrenner": 3, "fluchtzeit": 5, "radar": 1}
+		"nachbrenner": 3, "fluchtzeit": 5, "radar": 1, "schildladung": 3}
 	Meta.start_tiefe = 1
 	Meta.speichern()
 	_starte_lauf()
@@ -2010,6 +2027,23 @@ func _aufwertungs_test() -> void:
 	for b in get_tree().get_nodes_in_group("beute"):
 		b.free()
 	schiff.unverwundbar = true
+	# Notfallschild im Flug: Taste R füllt den Schild, zweiter Druck während der Abklingzeit tut nichts
+	schiff.schild = 5.0
+	Input.action_press("notfallschild")
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	Input.action_release("notfallschild")
+	var nf_voll := is_equal_approx(schiff.schild, schiff.schild_max)
+	var nf_rest := schiff.notfall_rest
+	schiff.schild = 5.0
+	Input.action_press("notfallschild")
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	Input.action_release("notfallschild")
+	await _warte(0.3)
+	_foto("notfallschild_hud")
+	ok = pruef.call("Notfallschild im Flug", nf_voll and absf(nf_rest - 600.0 * 0.92 * 0.92) < 0.1 and schiff.schild < 10.0 and hud.notfall.begins_with("Notfallschild 8:"),
+		"Taste R: Schild 5 → voll %s, Abklingzeit %.0f s (Stufe 3), zweiter Druck Schild %.0f, HUD „%s“" % [nf_voll, nf_rest, schiff.schild, hud.notfall]) and ok
 	var neue := func() -> Array:
 		var aus := []
 		for k in level.get_children():

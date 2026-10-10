@@ -70,6 +70,9 @@ var notschild := 0              ## übrige Notschilde in diesem Lauf
 var erz_mult := 1.0
 var magnet := 0.0               ## Reichweite des Erzmagneten in m, 0 = keiner
 var nachbrenner_cd := 0.0       ## Abklingzeit, 0 = kein Nachbrenner
+var notfall_cd := 0.0           ## Notfallschild: Abklingzeit (s), 0 = nicht gekauft
+var notfall_rest := 0.0         ## bis wieder bereit; läuft über Tiefen hinweg
+signal notfall_ausgeloest
 var nachbrenner_bereit := 0.0   ## Restzeit bis zum nächsten Nachbrenner
 var durchschlag_extra := 0      ## legendäre Laserlinse
 signal modul_gefunden(m: Dictionary)
@@ -128,6 +131,7 @@ func werte_setzen(w: Dictionary) -> void:
 	erz_mult = w.get("erz_mult", 1.0)
 	magnet = w.get("magnet", 0.0)
 	nachbrenner_cd = w.get("nachbrenner_cd", 0.0)
+	notfall_cd = w.get("notfall_cd", 0.0)
 	durchschlag_extra = w.get("durchschlag_extra", 0)
 	f = {}
 	for id in w.get("forschung", []):
@@ -163,6 +167,9 @@ func _physics_process(dt: float) -> void:
 		_maus = Vector2.ZERO
 		return
 	netz_t = maxf(netz_t - dt, 0.0)
+	notfall_rest = maxf(notfall_rest - dt, 0.0)
+	if Input.is_action_just_pressed("notfallschild"):
+		notfallschild()
 	emp_t = maxf(emp_t - dt, 0.0)
 	if not autopilot.is_empty():
 		_zug = Vector3.ZERO
@@ -199,6 +206,16 @@ func _physics_process(dt: float) -> void:
 	_waffen(dt)
 	schild_laden(dt)
 	_erzmagnet(dt)
+
+
+## Notfallschild: Schild sofort voll, dann notfall_cd Sekunden Abklingzeit. Gibt true zurück, wenn ausgelöst.
+func notfallschild() -> bool:
+	if notfall_cd <= 0.0 or notfall_rest > 0.0 or not aktiv:
+		return false
+	schild = schild_max
+	notfall_rest = notfall_cd
+	notfall_ausgeloest.emit()
+	return true
 
 
 ## Nachbrenner: doppeltes Tempo für 1,5 s, danach Abklingzeit. Gibt true zurück, wenn gezündet.

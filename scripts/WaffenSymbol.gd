@@ -152,6 +152,12 @@ static func zeichnen(ci: CanvasItem, r: Rect2, id: String, f: Color) -> void:
 			ci.draw_polyline(pk, f, dick * 0.7, true)
 			ci.draw_line(m + Vector2(0, -s * 0.45), m + Vector2(0, s * 0.15), f, dick)
 			ci.draw_circle(m + Vector2(0, s * 0.42), dick * 0.6, f)
+		"auf_schildladung":      # Schild mit Blitz
+			var ps := PackedVector2Array([m + Vector2(-0.7, -0.7) * s, m + Vector2(0.7, -0.7) * s, m + Vector2(0.7, 0.05) * s,
+				m + Vector2(0, 0.9) * s, m + Vector2(-0.7, 0.05) * s, m + Vector2(-0.7, -0.7) * s])
+			ci.draw_polyline(ps, f, dick * 0.7, true)
+			ci.draw_colored_polygon(PackedVector2Array([m + Vector2(0.1, -0.55) * s, m + Vector2(-0.3, 0.1) * s,
+				m + Vector2(0.0, 0.1) * s, m + Vector2(-0.1, 0.6) * s, m + Vector2(0.3, -0.1) * s, m + Vector2(0.0, -0.1) * s]), f)
 		"auf_erzausbeute":       # Kristall mit Plus
 			ci.draw_colored_polygon(PackedVector2Array([m + Vector2(-0.2, -0.85) * s, m + Vector2(0.25, -0.1) * s,
 				m + Vector2(-0.2, 0.8) * s, m + Vector2(-0.65, -0.1) * s]), Color(f, f.a * 0.8))

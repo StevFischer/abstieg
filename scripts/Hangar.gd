@@ -136,9 +136,9 @@ func aufbauen() -> void:
 	# Auf dem Handy nur die Controller-Zeile: Maus und Tastatur gibt es dort nicht.
 	var tastatur := "" if OS.has_feature("android") else \
 		"Maus drehen · WASD fliegen · Leertaste/Strg hoch/runter · Q/E rollen · Linke Maustaste Laser · Rechte Rakete\n" + \
-		"1–4 Laser wählen · 5–8 Rakete wählen · Umschalt Nachbrenner · Tab Leitstrahl · F Scheinwerfer · Esc Pause\n"
+		"1–4 Laser wählen · 5–8 Rakete wählen · Umschalt Nachbrenner · R Notfallschild · Tab Leitstrahl · F Scheinwerfer · Esc Pause\n"
 	spalte.add_child(_label(tastatur +
-		"Controller: linker Stick fliegen · rechter Stick drehen · LB/RB rollen · A/B hoch/runter · RT Laser · LT Rakete · X Nachbrenner · Steuerkreuz ←→ Laser, ↑↓ Rakete · Hangar: LB/RB Reiter",
+		"Controller: linker Stick fliegen · rechter Stick drehen · LB/RB rollen · A/B hoch/runter · RT Laser · LT Rakete · X Nachbrenner · R3 Notfallschild · Steuerkreuz ←→ Laser, ↑↓ Rakete · Hangar: LB/RB Reiter",
 		16, Color(0.6, 0.58, 0.52), true))
 	# Nach einem Kauf bleibt der Fokus auf demselben Knopf (Controller), sonst auf "Abstieg beginnen".
 	var ziel: Control = erster
