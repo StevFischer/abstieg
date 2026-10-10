@@ -62,26 +62,13 @@ func aufbauen() -> void:
 	_waffen_spalte(rechts)
 	links.add_child(_label("AUFRÜSTUNGEN — bleiben nach dem Tod", 22, ORANGE, false))
 	var erster: Button = null
+	var raster := GridContainer.new()
+	raster.columns = 2
+	raster.add_theme_constant_override("h_separation", 10)
+	raster.add_theme_constant_override("v_separation", 10)
+	links.add_child(raster)
 	for a in Meta.AUFRUESTUNGEN:
-		var zeile := HBoxContainer.new()
-		var text := _label("%s  (%s)   Stufe %d/%d" % [a.name, a.text, Meta.stufe(a.id), a.max], 22, Color(0.9, 0.88, 0.8), false)
-		text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		zeile.add_child(text)
-		var b := Button.new()
-		b.custom_minimum_size = Vector2(240, 44)
-		b.add_theme_font_size_override("font_size", 20)
-		if Meta.ausgereizt(a.id):
-			b.text = "ausgebaut"
-			b.disabled = true
-		else:
-			b.text = "Kaufen · %d Erz" % Meta.kosten(a.id)
-			b.disabled = not Meta.kaufbar(a.id)
-		var id: String = a.id
-		b.pressed.connect(func():
-			if Meta.kaufen(id):
-				aufbauen())
-		zeile.add_child(b)
-		links.add_child(zeile)
+		raster.add_child(_aufruestkarte(a))
 	spalte.add_child(HSeparator.new())
 	var los := Button.new()
 	los.text = "ABSTIEG BEGINNEN"
@@ -151,6 +138,74 @@ func _frage_neues_spiel() -> void:
 		aufbauen())
 	zeile.add_child(ja)
 	nein.call_deferred("grab_focus")      # Vorauswahl ist das Harmlose
+
+
+const AUF_FARBE := {"schild": Color(0.35, 0.65, 1.0), "panzerung": Color(1.0, 0.58, 0.22),
+	"triebwerk": Color(0.4, 1.0, 0.6), "raketen": Color(1.0, 0.4, 0.35)}
+
+
+## Aufrüstung als Karte wie die Waffen: Stufenpunkte, Symbol, Kaufknopf; Wirkung im Tooltip.
+func _aufruestkarte(a: Dictionary) -> Control:
+	var st := Meta.stufe(a.id)
+	var farbe: Color = AUF_FARBE.get(a.id, ORANGE)
+	var karte := PanelContainer.new()
+	karte.custom_minimum_size = Vector2(250, 0)
+	karte.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	karte.mouse_filter = Control.MOUSE_FILTER_STOP
+	var stil := StyleBoxFlat.new()
+	stil.bg_color = Color(farbe.r * 0.12, farbe.g * 0.12, farbe.b * 0.12, 0.95)
+	stil.border_color = Color(farbe, 0.85 if st > 0 else 0.45)
+	stil.set_border_width_all(2)
+	stil.set_corner_radius_all(8)
+	stil.content_margin_left = 10
+	stil.content_margin_right = 10
+	stil.content_margin_top = 6
+	stil.content_margin_bottom = 8
+	karte.add_theme_stylebox_override("panel", stil)
+	var spalte := VBoxContainer.new()
+	spalte.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	spalte.add_theme_constant_override("separation", 4)
+	karte.add_child(spalte)
+	# Stufenpunkte: gefüllt = gekauft
+	var punkte := _label("●".repeat(st) + "○".repeat(int(a.max) - st), 15, farbe, true)
+	punkte.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	spalte.add_child(punkte)
+	var sym := WaffenSymbol.new("auf_" + a.id, farbe)
+	sym.custom_minimum_size = Vector2(0, 70)
+	spalte.add_child(sym)
+	var b := Button.new()
+	b.custom_minimum_size = Vector2(0, 36)
+	b.add_theme_font_size_override("font_size", 16)
+	var id: String = a.id
+	if Meta.ausgereizt(id):
+		b.text = "ausgebaut"
+		b.disabled = true
+	else:
+		b.text = "Kaufen · %d" % Meta.kosten(id)
+		b.disabled = not Meta.kaufbar(id)
+		b.pressed.connect(func():
+			if Meta.kaufen(id):
+				aufbauen())
+	spalte.add_child(b)
+	var tip := _aufruest_tooltip(a, st)
+	karte.tooltip_text = tip
+	b.tooltip_text = tip
+	return karte
+
+
+func _aufruest_tooltip(a: Dictionary, st: int) -> String:
+	var jetzt := Meta.schiffswerte()
+	var zeilen: Array[String] = ["%s   Stufe %d/%d" % [a.name, st, a.max], a.text + " je Stufe"]
+	match a.id:
+		"schild":
+			zeilen.append("Schild jetzt %d%s" % [jetzt.schild_max, (" → %d" % (jetzt.schild_max + 25)) if st < a.max else ""])
+		"panzerung":
+			zeilen.append("Hülle jetzt %d%s" % [jetzt.huelle_max, (" → %d" % (jetzt.huelle_max + 25)) if st < a.max else ""])
+		"triebwerk":
+			zeilen.append("Tempo jetzt %.1f m/s%s" % [jetzt.tempo, (" → %.1f" % (14.0 * (1.0 + 0.08 * (st + 1)))) if st < a.max else ""])
+		"raketen":
+			zeilen.append("Raketen jetzt %d%s" % [jetzt.raketen_max, (" → %d" % (jetzt.raketen_max + 2)) if st < a.max else ""])
+	return "\n".join(zeilen)
 
 
 func _waffen_spalte(rechts: VBoxContainer) -> void:

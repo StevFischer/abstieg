@@ -4,6 +4,8 @@ extends Control
 ## Laser: Zwilling (zwei Bolzen), Streufeuer (Fächer), Vulkan (Kette), Plasma (Kugel).
 ## Raketen: Zielsuch (Rakete mit Bogenspur), Streurakete (drei Raketen), Smart (Rakete mit Splittern),
 ## Mega (große Rakete mit Explosionsstern).
+## Aufrüstungen: Schildgenerator (Schild mit Wellen), Panzerung (Platte mit Nieten), Triebwerk (Düse mit
+## Flamme), Raketenschacht (Magazin mit drei Raketen) — IDs mit Vorsilbe "auf_".
 ## Zum Einbetten (Hangar) als Control; im HUD über die statische Funktion zeichnen().
 
 var waffe := "zwilling"
@@ -70,6 +72,46 @@ static func zeichnen(ci: CanvasItem, r: Rect2, id: String, f: Color) -> void:
 			for i in 5:
 				var d := Vector2(0, -1).rotated(deg_to_rad(-60 + i * 30))
 				ci.draw_circle(m + Vector2(s * 0.25, -s * 0.55) + d * s * 0.45, dick * 0.55, f)
+		"auf_schild":
+			var pkt := PackedVector2Array()
+			for i in 17:      # Wappenschild: oben gerade, unten spitz
+				var t := float(i) / 16.0
+				var x := lerpf(-0.75, 0.75, t)
+				pkt.append(m + Vector2(x * s, -0.7 * s + 0.08 * s * sin(t * PI)))
+			pkt.append(m + Vector2(0.75 * s, 0.05 * s))
+			pkt.append(m + Vector2(0, 0.9 * s))
+			pkt.append(m + Vector2(-0.75 * s, 0.05 * s))
+			ci.draw_colored_polygon(pkt, Color(f, f.a * 0.35))
+			pkt.append(pkt[0])
+			ci.draw_polyline(pkt, f, dick * 0.7, true)
+			for k in 2:
+				ci.draw_arc(m + Vector2(0, 0.05 * s), s * (0.25 + 0.2 * k), deg_to_rad(200), deg_to_rad(340), 10, f, dick * 0.45, true)
+		"auf_panzerung":
+			var platte := Rect2(m - Vector2(0.75, 0.6) * s, Vector2(1.5, 1.2) * s)
+			ci.draw_rect(platte, Color(f, f.a * 0.35))
+			ci.draw_rect(platte, f, false, dick * 0.7)
+			ci.draw_line(m + Vector2(-0.75, 0) * s, m + Vector2(0.75, 0) * s, Color(f, f.a * 0.7), dick * 0.4)
+			for p in [Vector2(-0.55, -0.4), Vector2(0.55, -0.4), Vector2(-0.55, 0.4), Vector2(0.55, 0.4)]:
+				ci.draw_circle(m + p * s, dick * 0.55, f)
+			ci.draw_line(m + Vector2(0, -0.25) * s, m + Vector2(0, 0.25) * s, f, dick * 0.6)
+			ci.draw_line(m + Vector2(-0.25, 0) * s, m + Vector2(0.25, 0) * s, f, dick * 0.6)
+		"auf_triebwerk":
+			ci.draw_colored_polygon(PackedVector2Array([
+				m + Vector2(-0.35, -0.85) * s, m + Vector2(0.35, -0.85) * s,
+				m + Vector2(0.55, 0.05) * s, m + Vector2(-0.55, 0.05) * s]), Color(f, f.a * 0.6))
+			ci.draw_rect(Rect2(m + Vector2(-0.45, -0.95) * s, Vector2(0.9, 0.18) * s), f)
+			ci.draw_colored_polygon(PackedVector2Array([
+				m + Vector2(-0.45, 0.05) * s, m + Vector2(0.45, 0.05) * s, m + Vector2(0, 0.95) * s]),
+				Color(1.0, 0.75, 0.3, f.a))
+			ci.draw_colored_polygon(PackedVector2Array([
+				m + Vector2(-0.22, 0.05) * s, m + Vector2(0.22, 0.05) * s, m + Vector2(0, 0.6) * s]),
+				Color(1.0, 0.95, 0.7, f.a))
+		"auf_raketen":
+			var kasten := Rect2(m + Vector2(-0.85, 0.15) * s, Vector2(1.7, 0.65) * s)
+			ci.draw_rect(kasten, Color(f, f.a * 0.3))
+			ci.draw_rect(kasten, f, false, dick * 0.6)
+			for x in [-0.5, 0.0, 0.5]:
+				_rakete(ci, m + Vector2(x * s, -0.85 * s), Vector2(0, -1), s * 1.1, s * 0.12, f)
 		"mega":
 			var stern := PackedVector2Array()
 			for i in 16:

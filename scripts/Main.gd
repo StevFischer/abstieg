@@ -562,7 +562,7 @@ func _autotest() -> void:
 		_foto("hangar_versionen")
 		# Tooltip: Maus über die Karte des Plasmawerfers fahren lassen
 		for k in hangar.find_children("*", "PanelContainer", true, false):
-			if k.tooltip_text.begins_with("Plasma"):
+			if k.tooltip_text.begins_with("Panzerung"):
 				var bew := InputEventMouseMotion.new()
 				bew.position = k.get_global_rect().get_center()
 				bew.global_position = bew.position
