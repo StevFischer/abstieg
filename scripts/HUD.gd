@@ -163,7 +163,8 @@ func _waffenleiste() -> void:
 			else:
 				_zeichnung.draw_rect(r, Color(1, 1, 1, 0.18 if frei else 0.07), false, 1.0)
 			var taste := i + 1 + reihe * 4
-			var text := "%d  %s" % [taste, KURZ.get(w.id, w.name)]
+			var mk: int = _schiff.stufe_von(w.id)
+			var text := "%d  %s%s" % [taste, KURZ.get(w.id, w.name), (" " + ["", "", "II", "III", "IV", "V"][mk]) if frei and mk > 1 else ""]
 			var tf := Color(1, 1, 1, 0.95) if an else (Color(0.85, 0.85, 0.85, 0.75) if frei else Color(0.6, 0.6, 0.6, 0.3))
 			_zeichnung.draw_string(f, r.position + Vector2(8, 20), text, HORIZONTAL_ALIGNMENT_LEFT, b - 10, 15, tf)
 			if reihe == 1 and frei and int(w.kosten_munition) > 1:

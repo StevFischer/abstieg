@@ -5,7 +5,6 @@ var _pfad := "user://abstieg_meta.cfg"
 const AUFRUESTUNGEN := [
 	{"id": "schild", "name": "Schildgenerator", "text": "+25 Schild", "kosten": 40, "max": 8},
 	{"id": "panzerung", "name": "Panzerung", "text": "+25 Hülle", "kosten": 40, "max": 8},
-	{"id": "laser", "name": "Laserbündelung", "text": "+20 % Laserschaden", "kosten": 50, "max": 8},
 	{"id": "triebwerk", "name": "Triebwerk", "text": "+8 % Tempo", "kosten": 45, "max": 5},
 	{"id": "raketen", "name": "Raketenschacht", "text": "+2 Raketen", "kosten": 30, "max": 6},
 ]
@@ -15,6 +14,7 @@ var rekord := 0
 var laeufe := 0
 var stufen := {}
 var waffen: Array = []     ## freigeschaltete Waffen-IDs, zusätzlich zu Waffen.START
+var waffen_stufen := {}    ## Version je Waffe (1 = Mk I); fehlt ein Eintrag, ist es Mk I
 
 
 func _ready() -> void:
@@ -77,11 +77,29 @@ func waffe_kaufen(id: String) -> bool:
 	return true
 
 
+func waffen_stufe(id: String) -> int:
+	return int(waffen_stufen.get(id, 1))
+
+
+func waffe_verbesserbar(id: String) -> bool:
+	return id in waffen_frei() and waffen_stufe(id) < Waffen.MAX_STUFE \
+		and bank >= Waffen.verbessern_preis(id, waffen_stufe(id))
+
+
+func waffe_verbessern(id: String) -> bool:
+	if not waffe_verbesserbar(id):
+		return false
+	bank -= Waffen.verbessern_preis(id, waffen_stufe(id))
+	waffen_stufen[id] = waffen_stufe(id) + 1
+	speichern()
+	Protokoll.schreib("meta", "Waffe %s auf %s verbessert, Bank jetzt %d" % [id, Waffen.MK[waffen_stufe(id)], bank])
+	return true
+
+
 func schiffswerte() -> Dictionary:
 	return {
 		"schild_max": 50.0 + 25.0 * stufe("schild"),
 		"huelle_max": 100.0 + 25.0 * stufe("panzerung"),
-		"laser_mult": 1.0 + 0.2 * stufe("laser"),
 		"tempo": 14.0 * (1.0 + 0.08 * stufe("triebwerk")),
 		"raketen_max": 4 + 2 * stufe("raketen"),
 	}
@@ -96,6 +114,7 @@ func zuruecksetzen() -> void:
 	laeufe = 0
 	stufen = {}
 	waffen = []
+	waffen_stufen = {}
 	speichern()
 
 
@@ -108,6 +127,17 @@ func laden() -> void:
 	laeufe = c.get_value("meta", "laeufe", 0)
 	stufen = c.get_value("meta", "stufen", {})
 	waffen = c.get_value("meta", "waffen", [])
+	waffen_stufen = c.get_value("meta", "waffen_stufen", {})
+	# Laserbündelung gibt es seit 2026-10-10 nicht mehr (ersetzt durch Versionen je Waffe):
+	# gekaufte Stufen werden einmalig als Erz zurückgebucht.
+	if stufen.has("laser"):
+		var zurueck_l := 0
+		for k in int(stufen.laser):
+			zurueck_l += int(round(50 * pow(1.6, k)))
+		bank += zurueck_l
+		stufen.erase("laser")
+		speichern()
+		Protokoll.schreib("meta", "Laserbündelung abgeschafft: %d Erz zurückgebucht, Bank jetzt %d" % [zurueck_l, bank])
 	# Energie gibt es seit 2026-10-10 nicht mehr (Stev: „macht keinen Spaß“): gekaufte Energiewandler
 	# werden einmalig als Erz zurückgebucht.
 	if stufen.has("energie"):
@@ -127,6 +157,7 @@ func speichern() -> void:
 	c.set_value("meta", "laeufe", laeufe)
 	c.set_value("meta", "stufen", stufen)
 	c.set_value("meta", "waffen", waffen)
+	c.set_value("meta", "waffen_stufen", waffen_stufen)
 	var e := c.save(_pfad)
 	if e != OK:
 		Protokoll.schreib("fehler", "Meta speichern fehlgeschlagen: %s" % error_string(e))

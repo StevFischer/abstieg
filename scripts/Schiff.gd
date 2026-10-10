@@ -29,7 +29,7 @@ var huelle_max := 100.0
 var huelle := 100.0
 var raketen_max := 4
 var raketen := 4
-var laser_mult := 1.0
+var waffen_stufen := {}     ## Version je Waffe aus dem Hangar (1 = Mk I)
 var tempo := 14.0
 var welt: Node3D            ## Hier landen die Geschosse — das aktuelle Level.
 var aktiv := true
@@ -76,7 +76,6 @@ func werte_setzen(w: Dictionary) -> void:
 	schild = schild_max
 	huelle_max = w.huelle_max
 	huelle = huelle_max
-	laser_mult = w.laser_mult
 	tempo = w.tempo
 	raketen_max = w.raketen_max
 	raketen = raketen_max
@@ -138,6 +137,10 @@ func schild_laden(dt: float) -> void:
 
 
 ## Waffe wählen, wenn freigeschaltet. Gibt false zurück, wenn sie noch gekauft werden muss.
+func stufe_von(id: String) -> int:
+	return int(waffen_stufen.get(id, 1))
+
+
 func waehle(id: String) -> bool:
 	if not id in waffen_frei:
 		waffe_gewechselt.emit("%s — im Hangar kaufen" % Waffen.finde(id).name)
@@ -180,7 +183,7 @@ func laser_schuss() -> void:
 	_seite = -_seite
 	var versatz := 0.45 * _seite if w.anzahl == 1 else 0.0
 	var start := global_transform * Vector3(versatz, -0.3, -1.0)
-	_salve(w, start, laser_mult)
+	_salve(w, start, Waffen.schaden_faktor(stufe_von(w.id)))
 	var klang := get_tree().root.get_node_or_null("Klang")
 	if klang:
 		klang.spiele(w.ton, null, w.db, w.tonhoehe)
@@ -191,7 +194,7 @@ func raketen_schuss() -> void:
 	_raketen_cd = w.cd
 	raketen -= int(w.kosten_munition)
 	var start := global_transform * Vector3(0, -0.5, -1.2)
-	for g in _salve(w, start, laser_mult):
+	for g in _salve(w, start, Waffen.schaden_faktor(stufe_von(w.id))):
 		g.lenkung = w.lenkung
 		g.flaeche = w.flaeche
 		g.splitter = w.splitter
@@ -209,7 +212,8 @@ func _salve(w: Dictionary, start: Vector3, mult: float) -> Array:
 		if n == 1 and w.streuung > 0.0:      # Vulkan: leichtes Flattern
 			r = r.rotated(global_basis.x, deg_to_rad(randf_range(-w.streuung, w.streuung)))
 			r = r.rotated(global_basis.y, deg_to_rad(randf_range(-w.streuung, w.streuung)))
-		var g := Geschoss.neu(start, r, w.tempo, w.schaden * mult, true, w.farbe, 0.0, w.groesse)
+		# höhere Version: etwas dickere Bolzen, damit man es sieht
+		var g := Geschoss.neu(start, r, w.tempo, w.schaden * mult, true, w.farbe, 0.0, w.groesse * (0.85 + 0.15 * mult))
 		welt.add_child(g)
 		aus.append(g)
 	return aus

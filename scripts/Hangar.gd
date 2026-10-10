@@ -139,29 +139,38 @@ func _frage_neues_spiel() -> void:
 
 
 func _waffen_spalte(rechts: VBoxContainer) -> void:
-	rechts.add_child(_label("WAFFEN — dauerhaft freischalten (Laser 1–4, Raketen 5–8)", 22, ORANGE, false))
+	rechts.add_child(_label("WAFFEN — freischalten, dann bis Mk V verbessern (+30 % Schaden je Version)", 22, ORANGE, false))
 	var frei := Meta.waffen_frei()
 	for liste in [Waffen.LASER, Waffen.RAKETEN]:
 		for i in liste.size():
 			var w: Dictionary = liste[i]
 			var taste: int = i + 1 if liste == Waffen.LASER else i + 5
 			var zeile := HBoxContainer.new()
-			var text := _label("%d  %s  (%s)" % [taste, w.name, w.text], 20, Color(0.9, 0.88, 0.8), false)
+			var besitzt: bool = w.id in frei
+			var mk := Meta.waffen_stufe(w.id)
+			var text := _label("%d  %s%s  (%s)" % [taste, w.name, ("  " + Waffen.MK[mk]) if besitzt else "", w.text],
+				20, Color(0.9, 0.88, 0.8), false)
 			text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			zeile.add_child(text)
 			var b := Button.new()
 			b.custom_minimum_size = Vector2(220, 40)
 			b.add_theme_font_size_override("font_size", 19)
-			if w.id in frei:
-				b.text = "vorhanden"
+			var id: String = w.id
+			if besitzt and mk >= Waffen.MAX_STUFE:
+				b.text = "Mk V · ausgebaut"
 				b.disabled = true
+			elif besitzt:
+				b.text = "%s · %d Erz" % [Waffen.MK[mk + 1], Waffen.verbessern_preis(id, mk)]
+				b.disabled = not Meta.waffe_verbesserbar(id)
+				b.pressed.connect(func():
+					if Meta.waffe_verbessern(id):
+						aufbauen())
 			else:
 				b.text = "Kaufen · %d Erz" % w.preis
 				b.disabled = not Meta.waffe_kaufbar(w.id)
-			var id: String = w.id
-			b.pressed.connect(func():
-				if Meta.waffe_kaufen(id):
-					aufbauen())
+				b.pressed.connect(func():
+					if Meta.waffe_kaufen(id):
+						aufbauen())
 			zeile.add_child(b)
 			rechts.add_child(zeile)
 

@@ -97,6 +97,7 @@ func _starte_lauf() -> void:
 	schiff = Schiff.new()
 	schiff.werte_setzen(Meta.schiffswerte())
 	schiff.waffen_frei = Meta.waffen_frei()
+	schiff.waffen_stufen = Meta.waffen_stufen.duplicate()
 	schiff.waffe_gewechselt.connect(func(n: String): hud.aufnahme(n, Color(1.0, 0.8, 0.4)))
 	schiff.gestorben.connect(func(): _schiff_tot("Schiff zerstört"))
 	schiff.getroffen.connect(func(s: float): hud.blitz(s))
@@ -544,6 +545,16 @@ func _autotest() -> void:
 		await _waffen_schau()
 		get_tree().quit(0)
 		return
+	if "--zeige-hangar" in OS.get_cmdline_user_args():
+		Meta.waffen_stufen = {"zwilling": 3, "plasma": 2, "zielsuch": 5}
+		hud.visible = false
+		hangar.aufbauen()
+		hangar_ebene.visible = true
+		await _warte(0.8)
+		_foto("hangar_versionen")
+		Meta.laden()
+		get_tree().quit(0)
+		return
 	if "--zeige-schild" in OS.get_cmdline_user_args():
 		await _schild_messung()
 		get_tree().quit(0)
@@ -741,6 +752,29 @@ func _waffen_schau() -> void:
 		Protokoll.schreib("test", "Waffe %-14s %3d Geschosse, Schaden %6.0f, getroffene Ziele %d%s" % [
 			w.name, schuesse, schaden, getroffen, (", Splitter %d" % splitter_max) if splitter_max > 0 else ""])
 	Protokoll.schreib("test", "Schiffswerte: Schild %d / %d" % [schiff.schild, schiff.schild_max])
+	# Versionen: gleiche Schusszahl auf ein Ziel, Mk I / Mk III / Mk V
+	for id in ["zwilling", "plasma", "zielsuch", "smart"]:
+		var zeile := ""
+		for st in [1, 3, 5]:
+			schiff.waffen_stufen[id] = st
+			schiff.waehle(id)
+			var vorher := 0.0
+			for z in ziele:
+				vorher += z.hp
+			if Waffen.ist_laser(id):
+				for n in 4:
+					schiff.laser_schuss()
+					await _warte(0.5)
+			else:
+				schiff.raketen = 99
+				schiff.raketen_schuss()
+				await _warte(3.0)
+			await _warte(0.6)
+			var nach := 0.0
+			for z in ziele:
+				nach += z.hp
+			zeile += "  %s %.0f" % [Waffen.MK[st], vorher - nach]
+		Protokoll.schreib("test", "Version %-14s%s" % [Waffen.finde(id).name, zeile])
 
 
 ## Schildträger umkreisen: Anteil der Zeit, in der seine ungeschützte Seite zum Schiff zeigt.

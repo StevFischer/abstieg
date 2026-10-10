@@ -38,6 +38,19 @@ const RAKETEN := [
 ]
 
 const START := ["zwilling", "zielsuch"]
+## Versionen: wer eine Waffe besitzt, kann sie im Hangar bis Mk V verbessern, je Stufe +30 % Schaden.
+const MAX_STUFE := 5
+const MK := ["", "Mk I", "Mk II", "Mk III", "Mk IV", "Mk V"]
+
+
+static func schaden_faktor(stufe: int) -> float:
+	return 1.0 + 0.3 * (maxi(stufe, 1) - 1)
+
+
+## Preis für die nächste Version (von stufe auf stufe + 1).
+static func verbessern_preis(id: String, stufe: int) -> int:
+	var basis := maxf(60.0, float(finde(id).preis) * 0.6)
+	return int(round(basis * pow(1.6, stufe - 1)))
 
 
 static func finde(id: String) -> Dictionary:
