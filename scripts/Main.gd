@@ -1746,7 +1746,7 @@ func _gegner_neu_test() -> void:
 	for x in get_tree().get_nodes_in_group("gegner"):
 		if x.typ == "splitterteil":
 			teile += 1
-	ok = pruef.call("Splitter", teile == 3, "zerfiel in %d Teile" % teile) and ok
+	ok = pruef.call("Splitter", teile == 0, "Teile beim Abschuss: %d (soll 0, teilt sich nicht mehr)" % teile) and ok
 	for x in get_tree().get_nodes_in_group("gegner"):
 		x.free()
 	# 9 Schwarmnest

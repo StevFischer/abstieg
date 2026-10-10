@@ -156,7 +156,6 @@ var _phase_t := 0.0
 var _ramm_dir := Vector3.ZERO
 var _zielpunkt := Vector3.ZERO
 var _an_wand := false
-static var gesplittert := 0     ## für Test und Log
 var _geheilt := 0.0
 
 
@@ -981,11 +980,7 @@ func treffer(s: float) -> void:
 func _sterben() -> void:
 	_tot = true
 	remove_from_group("ziele")
-	if typ == "splitter":
-		gesplittert += 1
-		for i in 3:
-			var a := TAU * i / 3.0
-			verstaerkung.emit("splitterteil", global_position + (global_basis.x * cos(a) + global_basis.y * sin(a)) * 1.2, self)
+	# Splitter teilt sich nicht mehr (Stev 2026-10-10: „sollen sich nicht noch teilen, das ist zu fies und nervt“)
 	Effekte.explosion(get_parent(), global_position, Color(1.0, 0.6, 0.2), 9.0 if ist_boss else 3.5)
 	zerstoert.emit(self)
 	queue_free()
