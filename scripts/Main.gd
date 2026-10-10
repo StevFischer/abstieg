@@ -233,6 +233,8 @@ func _lade_level() -> void:
 	hud.setze_tiefe(tiefe, thema.name)
 	hud.mitteilung("TIEFE %d\n%s" % [tiefe, thema.name])
 	hud.status("Ziel: Reaktor zerstören")
+	if OS.has_feature("web") or "--aufwaermen" in OS.get_cmdline_user_args():
+		_aufwaermen()
 	if not autotest:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
@@ -579,14 +581,151 @@ func _process(dt: float) -> void:
 		hud.boss_wert(boss.hp, boss.hp_max)
 	_leitstrahl(dt)
 	if OS.has_feature("web"):
-		var frei := Input.mouse_mode != Input.MOUSE_MODE_CAPTURED
+		_ton_pruefen(dt)
+		var frei := Input.mouse_mode != Input.MOUSE_MODE_CAPTURED or _ton_zustand == "suspended"
 		if frei:
-			hud.status("Ins Bild klicken, um mit der Maus zu steuern")
+			hud.status("Ins Bild klicken, um mit der Maus zu steuern" + (" und den Ton einzuschalten" if _ton_zustand == "suspended" else ""))
 		elif _klick_hinweis and countdown < 0.0:
 			hud.status("" if reaktor.kaputt else "Ziel: Reaktor zerstören")
 		_klick_hinweis = frei
 	_radar()
 	hud.werte(schiff)
+
+
+## Browser (Stev 2026-10-10: „lags“): WebGL kompiliert Shader erst beim ersten Zeichnen — gemessen 140–190 ms
+## Hänger bei der ersten Explosion, beim Reaktor usw. Deshalb beim Laden jeder Tiefe hinter einem schwarzen
+## Ladebild einmal alles zeichnen, was später auftaucht: alle Gegnerarten, Fundstücke, Mine, Geschosse,
+## Schadenszahl, Explosionskugel mit Licht (Wände und Gegner einmal von einem Punktlicht beleuchtet).
+func _aufwaermen() -> void:
+	var t0 := Time.get_ticks_msec()
+	var schirm := CanvasLayer.new()
+	schirm.layer = 100
+	var schwarz := ColorRect.new()
+	schwarz.color = Color.BLACK
+	schwarz.set_anchors_preset(Control.PRESET_FULL_RECT)
+	schirm.add_child(schwarz)
+	var text := Label.new()
+	text.text = "Lädt …"
+	text.set_anchors_preset(Control.PRESET_CENTER)
+	text.add_theme_font_size_override("font_size", 28)
+	schirm.add_child(text)
+	add_child(schirm)
+	var cam := schiff.kamera
+	var vor := -cam.global_basis.z
+	var rechts := cam.global_basis.x
+	var oben := cam.global_basis.y
+	var mitte := cam.global_position + vor * 5.0
+	var teile: Array[Node] = []
+	var setzen := func(n: Node3D, versatz: Vector3):
+		level.add_child(n)
+		n.global_position = mitte + versatz
+		n.process_mode = Node.PROCESS_MODE_DISABLED     # nur zeichnen, nichts tun
+		for gr in n.get_groups():
+			n.remove_from_group(gr)
+		teile.append(n)
+	var typen := Gegner.TYPEN.keys().filter(func(t): return not t.begins_with("boss_"))
+	if LevelGen.ist_boss_tiefe(tiefe):
+		typen.append(Gegner.BOSSE[(tiefe / 5 - 1) % Gegner.BOSSE.size()])
+	for i in typen.size():
+		var g := Gegner.new()
+		g.einrichten(typen[i], tiefe)
+		setzen.call(g, rechts * (i % 6 - 2.5) * 1.6 + oben * (i / 6 - 1.5) * 1.6)
+		if g.typ in ["lauerer", "tarn"]:
+			g._tarn = 0.7
+			g._tarnung_anwenden()
+	var arten := Beute.ARTEN.keys()
+	for i in arten.size():
+		var b := Beute.neu(arten[i], Vector3.ZERO)
+		if arten[i] == "modul":
+			b.modul = Module.erzeugen(RandomNumberGenerator.new(), tiefe)
+		setzen.call(b, -vor * 1.5 + rechts * (i - 2.5) * 1.2 - oben * 2.5)
+	setzen.call(Mine.neu(Vector3.ZERO, 0.0), -vor * 1.5 + oben * 2.5)
+	setzen.call(Geschoss.neu(Vector3.ZERO, vor, 0.0, 0.0, true, Color(1, 0.3, 0.2)), -vor * 2.0 + rechts * 1.0)
+	setzen.call(Geschoss.neu(Vector3.ZERO, vor, 0.0, 0.0, false, Color(1, 0.6, 0.1), 0.0, 2.4), -vor * 2.0 - rechts * 1.0)
+	var zahl := Effekte.schadenszahl(level, mitte, "0")
+	if zahl:
+		teile.append(zahl)
+	# Explosionskugel wie Effekte.explosion (ohne Ton) und ein großes Punktlicht, das Wände und Gegner trifft
+	var k := MeshInstance3D.new()
+	var kugel := SphereMesh.new()
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.albedo_color = Color(1, 0.6, 0.2, 0.7)
+	kugel.material = m
+	k.mesh = kugel
+	setzen.call(k, -vor * 1.0)
+	# Jedes Material, das im Level schon steckt (Wände, Gitter, Deko, Reaktor), einmal auf einem kleinen Quadrat
+	var mats := {}
+	for mi: MeshInstance3D in level.find_children("*", "MeshInstance3D", true, false):
+		if mi.material_override:
+			mats[mi.material_override] = true
+		for si in mi.get_surface_override_material_count():
+			var sm := mi.get_surface_override_material(si)
+			if sm:
+				mats[sm] = true
+		if mi.mesh:
+			for si in mi.mesh.get_surface_count():
+				var mm := mi.mesh.surface_get_material(si)
+				if mm:
+					mats[mm] = true
+	var n_mat := 0
+	for mat in mats:
+		if n_mat >= 240:
+			break
+		var q := MeshInstance3D.new()
+		var qm := QuadMesh.new()
+		qm.size = Vector2(0.4, 0.4)
+		q.mesh = qm
+		q.material_override = mat
+		setzen.call(q, rechts * ((n_mat % 16) - 7.5) * 0.45 + oben * ((n_mat / 16) % 8 - 3.5) * 0.45 - vor * 0.5)
+		n_mat += 1
+	# Funken des Ausgangs (erscheinen erst nach dem Reaktor — Partikel-Shader)
+	if ausgang and ausgang._funken:
+		var f: GPUParticles3D = ausgang._funken.duplicate()
+		f.emitting = true
+		setzen.call(f, -vor * 1.0 + oben * 1.0)
+		f.process_mode = Node.PROCESS_MODE_INHERIT
+	var lichter: Array[Node] = []
+	for reichweite in [3.0, 36.0]:
+		var l := OmniLight3D.new()
+		l.omni_range = reichweite
+		l.light_energy = 2.2
+		setzen.call(l, Vector3.ZERO)
+		lichter.append(l)
+	for i in 3:
+		await get_tree().process_frame
+	# Zweite Runde nur mit dem Scheinwerfer, dritte ganz ohne Licht: jede Lichtlage ist eine eigene Shader-Variante
+	for l in lichter:
+		l.queue_free()
+	for i in 3:
+		await get_tree().process_frame
+	var scheinwerfer_an: bool = schiff.scheinwerfer.visible
+	schiff.scheinwerfer.visible = false
+	for i in 3:
+		await get_tree().process_frame
+	schiff.scheinwerfer.visible = scheinwerfer_an
+	for n in teile:
+		if is_instance_valid(n):
+			n.queue_free()
+	schirm.queue_free()
+	Protokoll.schreib("leistung", "Aufwärmen Tiefe %d: %d Teile (%d Levelmaterialien) in %d ms" % [tiefe, teile.size(), n_mat, Time.get_ticks_msec() - t0])
+
+
+## Browser (Stev 2026-10-10: „keinen Sound im Browser“): Der Browser startet den Ton erst nach einer Eingabe.
+## Die Seite weckt ihn bei jedem Klick/jeder Taste (head_include im Web-Export); hier wird der Zustand jede
+## Sekunde gelesen, bei Änderung protokolliert (Browserkonsole) und im Bild ein Hinweis gezeigt, solange er ruht.
+var _ton_zustand := ""
+var _ton_t := 0.0
+func _ton_pruefen(dt: float) -> void:
+	_ton_t -= dt
+	if _ton_t > 0.0:
+		return
+	_ton_t = 1.0
+	var z := str(JavaScriptBridge.eval("window.__abstiegTon ? window.__abstiegTon() : 'unbekannt'"))
+	if z != _ton_zustand:
+		Protokoll.schreib("ton", "Browser-Tonausgabe: %s" % z)
+		_ton_zustand = z
 
 
 ## Browser: Die Maus lässt sich nur nach einem Klick einfangen (Pointer Lock). Ein Klick ins Bild holt sie.
