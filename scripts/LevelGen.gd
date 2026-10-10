@@ -48,6 +48,7 @@ func erzeuge(p_saat: int, p_tiefe: int) -> void:
 			if _anbauen(BOSS_RAUM, quelle):
 				reaktor_raum = raeume.size() - 1
 				break
+	_saeulen()
 
 
 func _anbauen(fest := Vector3i.ZERO, quelle := -1) -> bool:
@@ -66,8 +67,12 @@ func _anbauen(fest := Vector3i.ZERO, quelle := -1) -> bool:
 			weg.append(p)
 		r_ende = r2
 	var groesse := Vector3i(rng.randi_range(2, 4), rng.randi_range(1, 3), rng.randi_range(2, 4))
-	if rng.randf() < 0.12:
+	var wurf := rng.randf()
+	if wurf < 0.12:
 		groesse = Vector3i(rng.randi_range(4, 6), rng.randi_range(3, 4), rng.randi_range(4, 6))
+	elif wurf < 0.28:
+		# Halle: bis 48 × 30 × 48 m, bekommt später Felssäulen als Deckung
+		groesse = Vector3i(rng.randi_range(5, 8), rng.randi_range(3, 5), rng.randi_range(5, 8))
 	if fest != Vector3i.ZERO:
 		groesse = fest
 	var ein := p + r_ende
@@ -146,6 +151,24 @@ func _reaktor_waehlen() -> void:
 	reaktor_raum = maxi(beste, 0)
 
 
+## Felssäulen in großen Hallen: jede dritte Zelle im Inneren (zwei Zellen Abstand zur Wand,
+## damit die Stolleneingänge frei bleiben) über die ganze Höhe zurück zu Fels.
+func _saeulen() -> void:
+	for i in raeume.size():
+		var r := raeume[i]
+		if i == start_raum or i == reaktor_raum or r.groesse.x < 5 or r.groesse.z < 5:
+			continue
+		for x in range(r.pos.x + 2, r.pos.x + r.groesse.x - 2, 3):
+			for z in range(r.pos.z + 2, r.pos.z + r.groesse.z - 2, 3):
+				# kein Schacht darf genau hier in Decke oder Boden münden
+				if zellen.has(Vector3i(x, r.pos.y + r.groesse.y, z)) or zellen.has(Vector3i(x, r.pos.y - 1, z)):
+					continue
+				for y in range(r.pos.y, r.pos.y + r.groesse.y):
+					var c := Vector3i(x, y, z)
+					if zellen.get(c, -2) == i:
+						zellen.erase(c)
+
+
 # --- Abfragen -------------------------------------------------------------
 
 static func ist_boss_tiefe(t: int) -> bool:
@@ -167,7 +190,8 @@ func zellen_von_raum(i: int) -> Array[Vector3i]:
 	for x in range(r.pos.x, r.pos.x + r.groesse.x):
 		for y in range(r.pos.y, r.pos.y + r.groesse.y):
 			for z in range(r.pos.z, r.pos.z + r.groesse.z):
-				aus.append(Vector3i(x, y, z))
+				if zellen.has(Vector3i(x, y, z)):     # Säulen auslassen
+					aus.append(Vector3i(x, y, z))
 	return aus
 
 

@@ -89,6 +89,18 @@ func schiffswerte() -> Dictionary:
 	}
 
 
+## Neues Spiel: alles auf null, außer den Lautstärke-Einstellungen (die liegen in einer eigenen Datei).
+func zuruecksetzen() -> void:
+	Protokoll.schreib("meta", "Neues Spiel: vorher Bank %d, Rekord %d, Läufe %d, Stufen %s, Waffen %s" % [
+		bank, rekord, laeufe, stufen, waffen])
+	bank = 0
+	rekord = 0
+	laeufe = 0
+	stufen = {}
+	waffen = []
+	speichern()
+
+
 func laden() -> void:
 	var c := ConfigFile.new()
 	if c.load(_pfad) != OK:

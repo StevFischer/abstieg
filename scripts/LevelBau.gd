@@ -127,25 +127,50 @@ static func _lichter(mine: Node3D, gen: LevelGen, thema: Dictionary, rng: Random
 	for i in gen.raeume.size():
 		var r := gen.raeume[i]
 		var farbe: Color = thema.lichter[rng.randi_range(0, thema.lichter.size() - 1)]
-		var oben := gen.mitte(i) + Vector3(0, (r.groesse.y - 1) * s * 0.5 + s * 0.3, 0)
-		var l := OmniLight3D.new()
-		l.light_color = farbe
-		l.omni_range = maxf(r.groesse.x, r.groesse.z) * s * 0.9 + 6.0
-		l.light_energy = 1.7
-		l.omni_attenuation = 0.8
-		l.position = oben
-		l.add_to_group("minenlicht")
-		l.set_meta("farbe", farbe)
-		mine.add_child(l)
-		var lampe := MeshInstance3D.new()
-		var box := BoxMesh.new()
-		box.size = Vector3(1.6, 0.25, 1.6)
-		var m := lampen_mat.duplicate() as StandardMaterial3D
-		m.albedo_color = Color(farbe.r * 3.0, farbe.g * 3.0, farbe.b * 3.0)
-		box.material = m
-		lampe.mesh = box
-		lampe.position = oben + Vector3(0, s * 0.18, 0)
-		mine.add_child(lampe)
+		# Lampen nur an echter Decke: oberste Zellen, über denen Fels ist (kein Schacht, keine Säule).
+		# Kleine Räume eine Lampe nahe der Mitte, Hallen ein Raster alle drei Zellen.
+		var decke: Array[Vector3i] = []
+		var top: int = r.pos.y + r.groesse.y - 1
+		for x in range(r.pos.x, r.pos.x + r.groesse.x):
+			for z in range(r.pos.z, r.pos.z + r.groesse.z):
+				var c := Vector3i(x, top, z)
+				if gen.zellen.has(c) and not gen.zellen.has(c + Vector3i.UP):
+					decke.append(c)
+		if decke.is_empty():
+			continue
+		var mitte_xz := Vector2(gen.mitte(i).x, gen.mitte(i).z)
+		decke.sort_custom(func(a: Vector3i, b: Vector3i):
+			return Vector2(a.x, a.z).distance_to(mitte_xz / s) < Vector2(b.x, b.z).distance_to(mitte_xz / s))
+		var plaetze: Array[Vector3i] = [decke[0]]
+		if r.groesse.x >= 5 and r.groesse.z >= 5:
+			plaetze.clear()
+			for c in decke:
+				if (c.x - r.pos.x) % 3 == 1 and (c.z - r.pos.z) % 3 == 1:
+					plaetze.append(c)
+			if plaetze.is_empty():
+				plaetze.append(decke[0])
+		var reichweite := (maxf(r.groesse.x, r.groesse.z) * s * 0.9 + 6.0) if plaetze.size() == 1 else s * 3.2
+		for c in plaetze:
+			var unter_decke := LevelGen.welt_von(c) + Vector3(0, s * 0.5 - 0.15, 0)
+			var l := OmniLight3D.new()
+			l.light_color = farbe
+			l.omni_range = reichweite + r.groesse.y * s * 0.3
+			l.light_energy = 1.7
+			l.omni_attenuation = 0.8
+			l.position = unter_decke - Vector3(0, s * 0.25, 0)
+			l.add_to_group("minenlicht")
+			l.set_meta("farbe", farbe)
+			mine.add_child(l)
+			var lampe := MeshInstance3D.new()
+			var box := BoxMesh.new()
+			box.size = Vector3(1.6, 0.2, 1.6)
+			var m := lampen_mat.duplicate() as StandardMaterial3D
+			m.albedo_color = Color(farbe.r * 1.05, farbe.g * 1.05, farbe.b * 1.05)
+			box.material = m
+			lampe.mesh = box
+			lampe.position = unter_decke
+			lampe.add_to_group("lampe")
+			mine.add_child(lampe)
 		# Stollen: jede dritte Zelle ein schwaches Licht
 		var weg: Array = r.tunnel
 		for j in range(1, weg.size(), 3):

@@ -32,7 +32,7 @@ static func explosion(eltern: Node, pos: Vector3, farbe: Color, groesse: float) 
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	m.albedo_color = Color(farbe.r * 3.0, farbe.g * 3.0, farbe.b * 3.0, 1.0)
+	m.albedo_color = Color(farbe.r * 2.0, farbe.g * 2.0, farbe.b * 2.0, 1.0)
 	kugel.material = m
 	k.mesh = kugel
 	eltern.add_child(k)

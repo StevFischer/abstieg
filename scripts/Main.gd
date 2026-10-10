@@ -282,8 +282,8 @@ func _umgebung_setzen() -> void:
 	e.fog_light_color = thema.nebel
 	e.fog_density = 0.012
 	e.glow_enabled = true
-	e.glow_intensity = 0.7
-	e.glow_hdr_threshold = 0.9
+	e.glow_intensity = 0.4          # Stev: Leuchteffekte waren übertrieben hell (vorher 0.7 / 0.9)
+	e.glow_hdr_threshold = 1.1
 	e.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 
 
@@ -520,6 +520,10 @@ func _autotest() -> void:
 		await _waffen_schau()
 		get_tree().quit(0)
 		return
+	if "--zeige-neu3" in OS.get_cmdline_user_args():
+		await _schau3()
+		get_tree().quit(0)
+		return
 	if "--zeige-gegner2" in OS.get_cmdline_user_args():
 		await _gegner_schau2()
 		get_tree().quit(0)
@@ -710,6 +714,101 @@ func _waffen_schau() -> void:
 		Protokoll.schreib("test", "Waffe %-14s %3d Geschosse, Schaden %6.0f, getroffene Ziele %d%s" % [
 			w.name, schuesse, schaden, getroffen, (", Splitter %d" % splitter_max) if splitter_max > 0 else ""])
 	Protokoll.schreib("test", "Schiffswerte: Schild %d / %d" % [schiff.schild, schiff.schild_max])
+
+
+## Portal, Minen gegen Beute, Halle mit Säulen und Lampen, Lampen an echter Decke, Neues-Spiel-Abfrage.
+func _schau3() -> void:
+	for g in get_tree().get_nodes_in_group("gegner"):
+		g.free()
+	await _warte(3.5)
+	var start := schiff.global_transform
+	# Portal zu / offen
+	var mitte_start := gen.mitte(gen.start_raum)
+	schiff.global_position = ausgang.global_position + (mitte_start - ausgang.global_position).normalized() * 7.0
+	schiff.look_at(ausgang.global_position, Vector3.UP)
+	await _warte(0.6)
+	_foto("neu3_portal_zu")
+	schiff.unverwundbar = true
+	ausgang.offen = true
+	ausgang._zustand_zeigen()
+	await _warte(1.2)
+	_foto("neu3_portal_offen")
+	ausgang.offen = false
+	ausgang._zustand_zeigen()
+	schiff.global_transform = start
+	# Mine neben Beute
+	var vor := -schiff.global_basis.z
+	var rechts := schiff.global_basis.x
+	var mp := schiff.global_position + vor * 7.0
+	var m := Mine.neu(mp - rechts * 1.8, 1.0)
+	level.add_child(m)
+	m.set_physics_process(false)
+	level.add_child(Beute.neu("schild", mp + rechts * 1.8))
+	level.add_child(Beute.neu("erz", mp))
+	await _warte(0.8)
+	_foto("neu3_mine_beute")
+	m.free()
+	# Lampen: jede muss an Decke hängen (Zelle darüber Fels, eigene Zelle befahrbar)
+	var falsch := 0
+	var lampen := get_tree().get_nodes_in_group("lampe")
+	for l in lampen:
+		var c := LevelGen.zelle_von(l.global_position - Vector3(0, 1.0, 0))
+		if not gen.zellen.has(c) or gen.zellen.has(c + Vector3i.UP):
+			falsch += 1
+	Protokoll.schreib("test", "Lampen: %d gesamt, %d nicht an echter Decke → %s" % [lampen.size(), falsch, "ok" if falsch == 0 else "FEHLER"])
+	# Halle mit Säulen suchen (notfalls neue Minen erzeugen)
+	var halle := -1
+	for versuch in 12:
+		for i in gen.raeume.size():
+			if gen.raeume[i].groesse.x >= 6 and gen.raeume[i].groesse.z >= 6 and i != gen.reaktor_raum and i != gen.start_raum:
+				halle = i
+		if halle >= 0:
+			break
+		_lade_level()
+		await _warte(0.3)
+		for g in get_tree().get_nodes_in_group("gegner"):
+			g.free()
+	if halle >= 0:
+		var r := gen.raeume[halle]
+		var ecke := LevelGen.welt_von(r.pos) + Vector3(0, (r.groesse.y - 1) * LevelGen.ZELLE * 0.5, 0)
+		var gegenueber := LevelGen.welt_von(r.pos + r.groesse - Vector3i.ONE)
+		schiff.global_position = LevelGen.welt_von(gen.naechste_zelle(ecke))
+		schiff.look_at(Vector3(gegenueber.x, schiff.global_position.y - 2.0, gegenueber.z), Vector3.UP)
+		await _warte(1.0)
+		var saeulen := 0
+		for x in range(r.pos.x, r.pos.x + r.groesse.x):
+			for z in range(r.pos.z, r.pos.z + r.groesse.z):
+				if not gen.zellen.has(Vector3i(x, r.pos.y, z)):
+					saeulen += 1
+		_foto("neu3_halle")
+		Protokoll.schreib("test", "Halle %s mit %d Säulen, Lampen gesamt %d" % [r.groesse, saeulen, get_tree().get_nodes_in_group("lampe").size()])
+	else:
+		Protokoll.schreib("test", "Halle: in 12 Minen keine gefunden")
+	# Neues Spiel (nur im Test-Spielstand)
+	Meta.bank = 777
+	Meta.rekord = 9
+	Meta.laeufe = 5
+	Meta.stufen = {"schild": 3}
+	Meta.waffen = ["plasma"]
+	Meta.speichern()
+	hud.visible = false
+	hangar.aufbauen()
+	hangar_ebene.visible = true
+	await _warte(0.3)
+	hangar._frage_neues_spiel()
+	await _warte(0.5)
+	_foto("neu3_reset_abfrage")
+	var ja: Button = null
+	for b in hangar.find_children("*", "Button", true, false):
+		if b.text.begins_with("Ja, alles"):
+			ja = b
+	ja.pressed.emit()
+	await _warte(0.5)
+	_foto("neu3_reset_danach")
+	Meta.laden()
+	var leer := Meta.bank == 0 and Meta.rekord == 0 and Meta.laeufe == 0 and Meta.stufen.is_empty() and Meta.waffen.is_empty()
+	Protokoll.schreib("test", "Neues Spiel: nach Neuladen Bank %d, Rekord %d, Läufe %d, Stufen %s, Waffen %s → %s" % [
+		Meta.bank, Meta.rekord, Meta.laeufe, Meta.stufen, Meta.waffen, "ok" if leer else "FEHLER"])
 
 
 func _testgegner(typ: String, pos: Vector3, physik: bool) -> Gegner:

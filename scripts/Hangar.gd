@@ -80,6 +80,12 @@ func aufbauen() -> void:
 	opt.custom_minimum_size = Vector2(0, 40)
 	opt.pressed.connect(func(): optionen.emit())
 	spalte.add_child(opt)
+	var neu := Button.new()
+	neu.text = "Neues Spiel (alles zurücksetzen)"
+	neu.custom_minimum_size = Vector2(0, 40)
+	neu.add_theme_color_override("font_color", Color(1.0, 0.45, 0.4))
+	neu.pressed.connect(_frage_neues_spiel)
+	spalte.add_child(neu)
 	var ende := Button.new()
 	ende.text = "Beenden"
 	ende.custom_minimum_size = Vector2(0, 40)
@@ -91,6 +97,45 @@ func aufbauen() -> void:
 		"Controller: linker Stick fliegen · rechter Stick drehen · LB/RB rollen · A/B hoch/runter · RT Laser · LT Rakete · Steuerkreuz ←→ Laser, ↑↓ Rakete",
 		16, Color(0.6, 0.58, 0.52), true))
 	erster.call_deferred("grab_focus")
+
+
+## Sicherheitsabfrage — Neues Spiel lässt sich nicht rückgängig machen.
+func _frage_neues_spiel() -> void:
+	var schleier := ColorRect.new()
+	schleier.name = "Abfrage"
+	schleier.color = Color(0, 0, 0, 0.8)
+	schleier.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(schleier)
+	var mitte := CenterContainer.new()
+	mitte.set_anchors_preset(Control.PRESET_FULL_RECT)
+	schleier.add_child(mitte)
+	var kasten := PanelContainer.new()
+	mitte.add_child(kasten)
+	var spalte := VBoxContainer.new()
+	spalte.add_theme_constant_override("separation", 18)
+	spalte.custom_minimum_size = Vector2(760, 0)
+	kasten.add_child(spalte)
+	spalte.add_child(_label("NEUES SPIEL?", 40, Color(1.0, 0.4, 0.35), true))
+	spalte.add_child(_label("Erz in der Bank (%d), alle Aufrüstungen, freigeschaltete Waffen,\nRekordtiefe und Läufe werden gelöscht. Das lässt sich nicht rückgängig machen." % Meta.bank,
+		20, Color(0.9, 0.88, 0.8), true))
+	var zeile := HBoxContainer.new()
+	zeile.add_theme_constant_override("separation", 20)
+	zeile.alignment = BoxContainer.ALIGNMENT_CENTER
+	spalte.add_child(zeile)
+	var nein := Button.new()
+	nein.text = "Abbrechen"
+	nein.custom_minimum_size = Vector2(260, 52)
+	nein.pressed.connect(func(): schleier.queue_free())
+	zeile.add_child(nein)
+	var ja := Button.new()
+	ja.text = "Ja, alles löschen"
+	ja.custom_minimum_size = Vector2(260, 52)
+	ja.add_theme_color_override("font_color", Color(1.0, 0.45, 0.4))
+	ja.pressed.connect(func():
+		Meta.zuruecksetzen()
+		aufbauen())
+	zeile.add_child(ja)
+	nein.call_deferred("grab_focus")      # Vorauswahl ist das Harmlose
 
 
 func _waffen_spalte(rechts: VBoxContainer) -> void:

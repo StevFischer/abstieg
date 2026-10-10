@@ -52,7 +52,7 @@ func _ready() -> void:
 	_mat.emission_energy_multiplier = 0.9
 	_glanz = StandardMaterial3D.new()
 	_glanz.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_glanz.albedo_color = Color(farbe.r * 2.5, farbe.g * 2.5, farbe.b * 2.5)
+	_glanz.albedo_color = Color(farbe.r * 1.6, farbe.g * 1.6, farbe.b * 1.6)
 	_form = Node3D.new()
 	add_child(_form)
 	match art:

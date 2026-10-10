@@ -39,7 +39,7 @@ static func neu(pos: Vector3, richtung: Vector3, tempo: float, p_schaden: float,
 	kapsel.rings = 2
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	m.albedo_color = Color(p_farbe.r * 4.0, p_farbe.g * 4.0, p_farbe.b * 4.0)
+	m.albedo_color = Color(p_farbe.r * 2.2, p_farbe.g * 2.2, p_farbe.b * 2.2)
 	kapsel.material = m
 	mi.mesh = kapsel
 	mi.rotation.x = PI / 2.0
@@ -47,7 +47,7 @@ static func neu(pos: Vector3, richtung: Vector3, tempo: float, p_schaden: float,
 	var l := OmniLight3D.new()
 	l.light_color = p_farbe
 	l.omni_range = 4.0 * groesse
-	l.light_energy = 1.2
+	l.light_energy = 0.8
 	g.add_child(l)
 	return g
 

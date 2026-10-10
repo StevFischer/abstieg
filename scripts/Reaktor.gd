@@ -39,7 +39,7 @@ func einrichten(stufe: int, p_farbe: Color) -> void:
 	_kmat.albedo_color = farbe
 	_kmat.emission_enabled = true
 	_kmat.emission = farbe
-	_kmat.emission_energy_multiplier = 3.0
+	_kmat.emission_energy_multiplier = 1.8
 	k.material = _kmat
 	_kern.mesh = k
 	add_child(_kern)
@@ -79,8 +79,8 @@ func _process(dt: float) -> void:
 		_licht.light_energy = 1.0 + randf() * 1.5
 		return
 	var tempo := 3.0 + 6.0 * (1.0 - hp / hp_max)
-	_kmat.emission_energy_multiplier = 2.5 + sin(_t * tempo) * 1.3
-	_licht.light_energy = 2.2 + sin(_t * tempo) * 0.8
+	_kmat.emission_energy_multiplier = 1.5 + sin(_t * tempo) * 0.7
+	_licht.light_energy = 1.7 + sin(_t * tempo) * 0.5
 
 
 func _physics_process(dt: float) -> void:

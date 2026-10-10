@@ -89,7 +89,7 @@ static func _paneel(thema: Dictionary) -> Array:
 		for x in G:
 			var rand := x < 6 or y < 6 or x >= G - 6 or y >= G - 6
 			var leuchtet := not rand and (y % 10) < 6
-			var c := licht.darkened(0.25 + 0.15 * float(y % 10) / 6.0) if leuchtet else (Color(0.08, 0.08, 0.09) if not rand else Color(0.25, 0.25, 0.27))
+			var c := licht.darkened(0.45 + 0.15 * float(y % 10) / 6.0) if leuchtet else (Color(0.08, 0.08, 0.09) if not rand else Color(0.25, 0.25, 0.27))
 			farbe.set_pixel(x, y, c)
 			var h := 0.9 if rand else (0.5 if leuchtet else 0.3)
 			hoehe.set_pixel(x, y, Color(h, h, h))
@@ -114,5 +114,5 @@ static func _material(bilder: Array, thema: Dictionary, leuchtend: bool) -> Stan
 	if leuchtend:
 		m.emission_enabled = true
 		m.emission_texture = m.albedo_texture
-		m.emission_energy_multiplier = 1.1
+		m.emission_energy_multiplier = 0.55
 	return m

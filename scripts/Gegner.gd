@@ -180,11 +180,11 @@ func _materialien(d: Dictionary) -> Dictionary:
 	rahmen.metallic = 0.3
 	var leuchte := StandardMaterial3D.new()
 	leuchte.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	leuchte.albedo_color = Color(d.auge.r * 3.0, d.auge.g * 3.0, d.auge.b * 3.0)
+	leuchte.albedo_color = Color(d.auge.r * 1.8, d.auge.g * 1.8, d.auge.b * 1.8)
 	var duese := leuchte.duplicate() as StandardMaterial3D
-	duese.albedo_color = Color(2.6, 1.4, 0.5)
+	duese.albedo_color = Color(1.6, 0.85, 0.3)
 	var mine := leuchte.duplicate() as StandardMaterial3D
-	mine.albedo_color = Color(3.0, 1.3, 0.3)
+	mine.albedo_color = Color(1.8, 0.8, 0.2)
 	var schild := StandardMaterial3D.new()
 	schild.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	schild.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
