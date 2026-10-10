@@ -77,6 +77,8 @@ func _ready() -> void:
 
 func _zeige_hangar() -> void:
 	zustand = "hangar"
+	boss = null
+	hud.boss_aus()
 	get_tree().paused = false
 	pause_ebene.visible = false
 	if level:
@@ -136,6 +138,10 @@ func _leistung_protokollieren() -> void:
 func _lade_level() -> void:
 	_leistung_protokollieren()
 	_bilder_tiefe = tiefe
+	# Bossanzeige gehört nur zur Boss-Tiefe: bei jedem neuen Level weg (Boss-Tiefen schalten sie wieder an).
+	# Vorher verschwand sie nur, wenn der Boss besiegt wurde — nach einem Tod blieb sie mit altem Stand stehen.
+	boss = null
+	hud.boss_aus()
 	var t0 := Time.get_ticks_msec()
 	zustand = "flug"
 	countdown = -1.0
@@ -570,6 +576,10 @@ func _autotest() -> void:
 		await _waffen_schau()
 		get_tree().quit(0)
 		return
+	if "--boss-reset" in OS.get_cmdline_user_args():
+		await _boss_reset_test()
+		get_tree().quit(0)
+		return
 	if "--controller-test" in OS.get_cmdline_user_args():
 		await _controller_test()
 		get_tree().quit(0)
@@ -828,6 +838,39 @@ func _waffen_schau() -> void:
 				nach += z.hp
 			zeile += "  %s %.0f" % [Waffen.MK[st], vorher - nach]
 		Protokoll.schreib("test", "Version %-14s%s" % [Waffen.finde(id).name, zeile])
+
+
+## Stevs Fall: in einer Boss-Tiefe sterben → Hangar → neuer Lauf. Die Bossanzeige darf außerhalb von
+## Boss-Tiefen nicht stehen bleiben, und der Boss beginnt beim nächsten Mal mit vollem Leben.
+func _boss_reset_test() -> void:
+	autotest = false                     # echter Ablauf: nach dem Tod zurück in den Hangar
+	var erg: Array[String] = []
+	_starte_lauf()
+	tiefe = 5
+	_lade_level()
+	await _warte(1.0)
+	var b1 := boss
+	var an_boss := hud._boss_balken.visible
+	b1.treffer(b1.hp * 0.6)
+	await _warte(0.3)
+	_schiff_tot("Testtod im Bosslevel")
+	await _warte(5.0)
+	var im_hangar := zustand == "hangar"
+	var balken_hangar := hud._boss_balken.visible
+	_starte_lauf()
+	await _warte(1.0)
+	var balken_t1 := hud._boss_balken.visible
+	tiefe = 5
+	_lade_level()
+	await _warte(1.0)
+	var voll := boss != null and is_equal_approx(boss.hp, boss.hp_max)
+	var balken_t5 := hud._boss_balken.visible
+	erg.append("Bosslevel: Anzeige an %s; nach Tod im Hangar %s, Anzeige dort %s; neuer Lauf Tiefe 1 Anzeige %s; wieder Tiefe 5: Anzeige %s, Boss volles Leben %s" % [
+		an_boss, im_hangar, balken_hangar, balken_t1, balken_t5, voll])
+	var ok := an_boss and im_hangar and not balken_hangar and not balken_t1 and balken_t5 and voll
+	for e in erg:
+		Protokoll.schreib("test", "Boss-Reset: " + e)
+	Protokoll.schreib("test", "BOSS-RESET-TEST %s" % ("BESTANDEN" if ok else "FEHLGESCHLAGEN"))
 
 
 # --- Controller-Test: alles nur mit simulierten Gamepad-Eingaben (wie der GameSir am Handy) -----------
