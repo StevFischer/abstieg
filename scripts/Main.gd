@@ -777,6 +777,34 @@ func _autotest() -> void:
 		await _gegner_schau()
 		get_tree().quit(0)
 		return
+	if "--raketen-test" in OS.get_cmdline_user_args():
+		Meta.start_tiefe = 1
+		_starte_lauf()
+		await _warte(1.0)
+		schiff.unverwundbar = true
+		var erg := []
+		var meldung := [""]       # Lambdas fangen Variablen als Kopie, ein Array als Verweis
+		schiff.aufgenommen.connect(func(art: String, m: int): meldung[0] = Beute.beschriftung(art, m))
+		for vorher in [0, schiff.raketen_max / 2]:
+			schiff.raketen = vorher
+			var gut := schiff.aufnehmen("rakete", 2)
+			erg.append("%d/%d → %d/%d, Meldung „%s“" % [vorher, schiff.raketen_max, schiff.raketen, schiff.raketen_max, meldung[0]])
+			if not gut or schiff.raketen != schiff.raketen_max or meldung[0] != "RAKETEN +%d" % (schiff.raketen_max - vorher):
+				erg.append("FEHLER")
+		var voll_genommen := schiff.aufnehmen("rakete", 2)
+		var b := Beute.neu("rakete", schiff.global_position - schiff.global_basis.z * 6.0)
+		level.add_child(b)
+		await _warte(0.4)
+		var schild_text: String = (b.get_children().filter(func(c): return c is Label3D)[0] as Label3D).text
+		var ok: bool = not "FEHLER" in erg and not voll_genommen and schild_text == "RAKETEN · AUFFÜLLEN"
+		Protokoll.schreib("test", "Raketenfund: %s; bei vollem Vorrat genommen %s; Schild im Bergwerk „%s“ → %s" % [
+			"; ".join(erg), voll_genommen, schild_text, "BESTANDEN" if ok else "FEHLGESCHLAGEN"])
+		get_tree().quit(0)
+		return
+	if "--ton-test" in OS.get_cmdline_user_args():
+		await _ton_test()
+		get_tree().quit(0)
+		return
 	if "--station-test" in OS.get_cmdline_user_args():
 		await _station_test()
 		get_tree().quit(0)
@@ -1758,6 +1786,73 @@ func _aufwertungs_test() -> void:
 	Meta.zuruecksetzen()     # Teststände nicht in den nächsten Test mitnehmen (gemeinsamer Autotest-Spielstand)
 
 
+## Ton: den Spielton am Hauptkanal aufnehmen und jeden Klang einzeln auslösen; die Zeitmarken stehen im
+## Log, die Pegel misst tools/ton_pruefen.py in der WAV-Datei pruefung/spielton.wav.
+func _ton_test() -> void:
+	var klang := get_node("/root/Klang")
+	var t_warte := Time.get_ticks_msec()
+	while not klang.musik_bereit and Time.get_ticks_msec() - t_warte < 20000:
+		await get_tree().process_frame
+	Protokoll.schreib("test", "Ton: Musik bereit nach %d ms Wartezeit" % (Time.get_ticks_msec() - t_warte))
+	Meta.zuruecksetzen()
+	Meta.start_tiefe = 1
+	_starte_lauf()
+	await _warte(1.0)
+	for g in get_tree().get_nodes_in_group("gegner"):
+		g.free()
+	var musik_bus := AudioServer.get_bus_index("Musik")
+	AudioServer.set_bus_mute(musik_bus, true)     # Einzeltöne ohne Musik darunter, Musik am Ende allein
+	var rec := AudioEffectRecord.new()
+	AudioServer.add_bus_effect(0, rec)
+	rec.set_recording_active(true)
+	var t0 := Time.get_ticks_msec()
+	var marken := []
+	var marke := func(name: String):
+		marken.append("%s=%.2f" % [name, (Time.get_ticks_msec() - t0) / 1000.0])
+	await _warte(0.8)
+	marke.call("stille")
+	await _warte(0.8)
+	marke.call("laser")
+	schiff.laser_schuss()
+	await _warte(1.0)
+	marke.call("rakete")
+	schiff.raketen_schuss()
+	await _warte(1.2)
+	schiff.unverwundbar = false
+	schiff.schild = 50.0
+	marke.call("treffer_schild")
+	schiff.treffer(5.0)
+	await _warte(1.0)
+	schiff.schild = 0.0
+	marke.call("treffer_huelle")
+	schiff.treffer(5.0)
+	schiff.unverwundbar = true
+	await _warte(1.0)
+	marke.call("explosion")
+	Effekte.explosion(level, schiff.global_position - schiff.global_basis.z * 8.0, Color.ORANGE, 3.5)
+	await _warte(1.5)
+	marke.call("sirene")
+	_reaktor_weg()
+	await _warte(1.9)
+	marke.call("countdown")
+	await _warte(1.6)
+	countdown = -1.0
+	await _warte(1.0)
+	AudioServer.set_bus_mute(musik_bus, false)
+	marke.call("musik")
+	await _warte(3.0)
+	marke.call("ende")
+	rec.set_recording_active(false)
+	var wav := rec.get_recording()
+	var pfad := ProjectSettings.globalize_path("res://pruefung/spielton.wav")
+	var fehler := wav.save_to_wav(pfad) if wav else ERR_CANT_CREATE
+	Protokoll.schreib("test", "Ton: Aufnahme %s (%s), Marken %s, Zähler %s" % [pfad, error_string(fehler), " ".join(marken), klang.zaehler])
+	_zeige_hangar()
+	_optionen_auf()
+	await _warte(0.6)
+	_foto("optionen_musik")
+
+
 ## Station: Kristalle finden, Gebäude bauen, jede Gebäudewirkung, Modul-Aufwertung, Hangar.
 func _station_test() -> void:
 	var erg: Array[String] = []
@@ -1915,7 +2010,7 @@ func _pakt_test() -> void:
 	var zaehle := func(horde: int) -> int:
 		Meta.pakt["horde"] = horde
 		var n := 0
-		for saat in 5:
+		for saat in 30:      # 30 Saaten: mit mehr Gegnern laufen die Würfelfolgen auseinander, das streut
 			_rng.seed = 4242 + saat
 			n += _gegner_setzen()
 			for x in get_tree().get_nodes_in_group("gegner"):
@@ -1928,7 +2023,7 @@ func _pakt_test() -> void:
 	for i in 10000:
 		summe += horde_anzahl(3)
 	ok = pruef.call("Horde-Rechnung", absf(summe / 30000.0 - 1.6) < 0.02, "3 Gegner → im Mittel %.3f (soll 4,8)" % (summe / 10000.0)) and ok
-	ok = pruef.call("Horde", mit > ohne * 1.4 and mit < ohne * 1.8, "%d statt %d Gegner (×%.2f, soll ~1,6)" % [mit, ohne, float(mit) / ohne]) and ok
+	ok = pruef.call("Horde", mit > ohne * 1.45 and mit < ohne * 1.75, "%d statt %d Gegner (×%.2f, soll ~1,6)" % [mit, ohne, float(mit) / ohne]) and ok
 	_reaktor_weg()
 	ok = pruef.call("Kurze Lunte", is_equal_approx(countdown, gen.fluchtzeit() * 0.6), "Fluchtzeit %.1f statt %.1f s" % [countdown, gen.fluchtzeit()]) and ok
 	# Bosse, Meilensteine, Rekord

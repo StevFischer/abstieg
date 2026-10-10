@@ -45,7 +45,7 @@ func aufbauen() -> void:
 		var zeile := HBoxContainer.new()
 		zeile.add_theme_constant_override("separation", 20)
 		var name_l := _text(Klang.KANAL_NAMEN[k], 24, Color(0.9, 0.88, 0.8))
-		name_l.custom_minimum_size = Vector2(260, 0)
+		name_l.custom_minimum_size = Vector2(300, 0)      # „Explosionen und Treffer“ ist die längste Beschriftung
 		zeile.add_child(name_l)
 		var regler := HSlider.new()
 		regler.min_value = 0

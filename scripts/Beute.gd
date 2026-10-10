@@ -36,6 +36,11 @@ static func beschriftung(p_art: String, p_menge: int) -> String:
 	return "%s +%d" % [ARTEN[p_art].name, p_menge]
 
 
+## Schild über dem Fundstück im Bergwerk: Raketen füllen immer ganz auf.
+static func schild_text(p_art: String, p_menge: int) -> String:
+	return "RAKETEN · AUFFÜLLEN" if p_art == "rakete" else beschriftung(p_art, p_menge)
+
+
 ## Aufnahmekugel. Mit dem Schiffsradius 0,9 m wird Beute bis 4,6 m Mittelpunktabstand eingesammelt
 ## (vorher 1,4 → 2,3 m; Stev 2026-10-10: „verdoppele die Einsammelreichweite“).
 const SAMMEL_RADIUS := 3.7
@@ -109,7 +114,7 @@ func _ready() -> void:
 	_form.scale = Vector3.ONE * 1.3
 
 	var schild := Label3D.new()
-	schild.text = Module.name_von(modul) if art == "modul" else beschriftung(art, menge)
+	schild.text = Module.name_von(modul) if art == "modul" else schild_text(art, menge)
 	schild.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	schild.font_size = 40
 	schild.outline_size = 12

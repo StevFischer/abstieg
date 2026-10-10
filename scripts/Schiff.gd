@@ -338,6 +338,9 @@ func raketen_schuss() -> void:
 	_raketen_cd = w.cd
 	if not (f.has("t_sparer") and randf() < 0.25):          # Raketensparer
 		raketen -= int(w.kosten_munition)
+	var klang := get_tree().root.get_node_or_null("Klang")
+	if klang:
+		klang.spiele("rakete", null, -7.0, 1.15 if w.anzahl > 1 else 1.0)
 	var start := global_transform * Vector3(0, -0.5, -1.2)
 	for g in _salve(w, start, Waffen.schaden_faktor(stufe_von(w.id)) * raketen_mult):
 		g.lenkung = w.lenkung
@@ -391,6 +394,8 @@ func _autopilot_fliegen(dt: float) -> void:
 func aufnehmen(art: String, menge: int) -> bool:
 	if art == "erz":
 		menge = int(round((menge + (1 if f.has("b_sonde") else 0)) * erz_mult))      # Erzsonde, Raffinerie
+	elif art == "rakete":
+		menge = raketen_max - raketen        # Meldung zeigt, wie viele wirklich dazukamen
 	var genommen := _aufnehmen(art, menge)
 	if genommen:
 		aufgenommen.emit(art, menge)
@@ -409,10 +414,10 @@ func _aufnehmen(art: String, menge: int) -> bool:
 			if huelle >= huelle_max:
 				return false
 			huelle = minf(huelle_max, huelle + menge)
-		"rakete":
+		"rakete":         # Stev 2026-10-10: ein Raketenfund füllt alle Raketen auf, nicht nur +2
 			if raketen >= raketen_max:
 				return false
-			raketen = mini(raketen_max, raketen + menge)
+			raketen = raketen_max
 		"erz":
 			erz_gefunden.emit(menge)
 		"kristall":
@@ -426,6 +431,17 @@ func ueberladung_ausloesen() -> void:
 		_ueberladung_t = 3.0
 
 
+## Treffer hörbar machen: Schild klingt hell, Hülle dumpf. Höchstens alle 0,12 s, sonst prasselt es.
+var _treffer_ton_t := 0
+func _treffer_ton(nur_schild: bool) -> void:
+	if Time.get_ticks_msec() - _treffer_ton_t < 120:
+		return
+	_treffer_ton_t = Time.get_ticks_msec()
+	var klang := get_tree().root.get_node_or_null("Klang")
+	if klang:
+		klang.spiele("treffer_schild" if nur_schild else "treffer_huelle", null, -6.0 if nur_schild else -3.0)
+
+
 func getarnt() -> bool:
 	return tarn_t > 0.0
 
@@ -435,7 +451,9 @@ func treffer(s: float) -> void:
 		return
 	_seit_treffer = 0.0
 	s *= schaden_faktor
+	var hatte_schild := schild > 0.0
 	schild -= s
+	_treffer_ton(hatte_schild and schild >= 0.0)
 	if schild < 0.0:
 		huelle += schild      # was der Schild nicht abfängt, trifft die Hülle
 		schild = 0.0

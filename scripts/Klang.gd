@@ -7,13 +7,20 @@ extends Node
 const RATE := 44100
 const MAX_GLEICHZEITIG := 28
 ## Lautstärkeregler: je Regler ein Audiokanal (Bus). "gesamt" ist der Hauptkanal.
-const KANAELE := {"gesamt": "Master", "laser": "Laser", "gegner": "Gegner", "explosionen": "Explosionen", "alarm": "Alarm"}
-const KANAL_NAMEN := {"gesamt": "Gesamt", "laser": "Eigener Laser", "gegner": "Gegnerschüsse", "explosionen": "Explosionen",
-	"alarm": "Alarm und Countdown"}
-const TON_KANAL := {"laser": "Laser", "laser_gegner": "Gegner", "einschlag": "Explosionen",
-	"explosion": "Explosionen", "explosion_gross": "Explosionen", "sirene": "Alarm", "piep": "Alarm"}
+const KANAELE := {"gesamt": "Master", "laser": "Laser", "gegner": "Gegner", "explosionen": "Explosionen", "alarm": "Alarm",
+	"musik": "Musik"}
+const KANAL_NAMEN := {"gesamt": "Gesamt", "laser": "Eigene Waffen", "gegner": "Gegnerschüsse", "explosionen": "Explosionen und Treffer",
+	"alarm": "Alarm und Countdown", "musik": "Musik"}
+const TON_KANAL := {"laser": "Laser", "rakete": "Laser", "laser_gegner": "Gegner", "einschlag": "Explosionen",
+	"explosion": "Explosionen", "explosion_gross": "Explosionen", "treffer_schild": "Explosionen", "treffer_huelle": "Explosionen",
+	"sirene": "Alarm", "piep": "Alarm"}
+const MUSIK_RATE := 22050      ## Musik in halber Abtastrate: halb so viel Rechenzeit beim Erzeugen, klingt für Synthflächen gleich
+const MUSIK_DB := -15.0
 
-var lautstaerke := {"gesamt": 1.0, "laser": 1.0, "gegner": 1.0, "explosionen": 1.0, "alarm": 1.0}
+var lautstaerke := {"gesamt": 1.0, "laser": 1.0, "gegner": 1.0, "explosionen": 1.0, "alarm": 1.0, "musik": 1.0}
+var musik: AudioStreamPlayer
+var musik_bereit := false
+var _musik_auftrag := -1
 var _einstellungen := "user://abstieg_einstellungen.cfg"
 
 var toene := {}
@@ -48,7 +55,32 @@ func _ready() -> void:
 	toene["explosion_gross"] = _explosion(2.2, 0.25, 0.9, 2.2)
 	toene["sirene"] = _sirene(1.6)
 	toene["piep"] = _piep(0.07, 1250.0)
+	toene["rakete"] = _rakete(0.8)
+	toene["treffer_schild"] = _treffer_schild(0.4)
+	toene["treffer_huelle"] = _treffer_huelle(0.35)
 	Protokoll.schreib("klang", "%d Töne erzeugt in %d ms" % [toene.size(), Time.get_ticks_msec() - t0])
+	# Musik ist 16 s lang — im Hintergrund erzeugen, damit der Start (gerade am Handy) nicht wartet.
+	musik = AudioStreamPlayer.new()
+	musik.bus = "Musik"
+	musik.volume_db = MUSIK_DB
+	add_child(musik)
+	_musik_auftrag = WorkerThreadPool.add_task(func():
+		var t1 := Time.get_ticks_msec()
+		var w := _musik_bauen()
+		call_deferred("_musik_fertig", w, Time.get_ticks_msec() - t1))
+
+
+## Beim Beenden auf die Musik-Erzeugung warten, sonst läuft der Faden in ein freigegebenes Objekt.
+func _exit_tree() -> void:
+	if _musik_auftrag >= 0:
+		WorkerThreadPool.wait_for_task_completion(_musik_auftrag)
+
+
+func _musik_fertig(w: AudioStreamWAV, ms: int) -> void:
+	musik.stream = w
+	musik.play()
+	musik_bereit = true
+	Protokoll.schreib("klang", "Musik erzeugt in %d ms (%.0f s Schleife), läuft" % [ms, w.data.size() / 2.0 / MUSIK_RATE])
 
 
 ## pos == null: ohne Raum (eigener Laser). Sonst räumlich an pos.
@@ -175,7 +207,117 @@ func _explosion(dauer: float, start_hell: float, grollen: float, abfall: float) 
 	return _wav(werte)
 
 
-func _wav(werte: PackedFloat32Array) -> AudioStreamWAV:
+## Raketenstart: Rauschen durch einen Filter, der auf- und wieder zugeht (Fauchen), darunter ein tiefer Schub.
+func _rakete(dauer: float) -> AudioStreamWAV:
+	var n := int(dauer * RATE)
+	var werte := PackedFloat32Array()
+	werte.resize(n)
+	var tp := 0.0
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var anteil := t / dauer
+		var hell := 0.05 + 0.4 * sin(PI * minf(anteil * 1.6, 1.0))
+		tp += (_rng.randf_range(-1.0, 1.0) - tp) * hell
+		phase = fmod(phase + lerpf(95.0, 60.0, anteil) / RATE, 1.0)
+		var huelle := minf(1.0, t * 120.0) * exp(-t * 3.2)
+		werte[i] = (tp * 1.6 + sin(TAU * phase) * 0.5) * huelle
+	return _wav(werte)
+
+
+## Treffer auf den Schild: heller, metallischer Klang (zwei unharmonische Teiltöne), schnell verklingend.
+func _treffer_schild(dauer: float) -> AudioStreamWAV:
+	var n := int(dauer * RATE)
+	var werte := PackedFloat32Array()
+	werte.resize(n)
+	var p1 := 0.0
+	var p2 := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var f := lerpf(620.0, 380.0, t / dauer)
+		p1 = fmod(p1 + f / RATE, 1.0)
+		p2 = fmod(p2 + f * 2.76 / RATE, 1.0)
+		var s := sin(TAU * p1) + 0.45 * sin(TAU * p2) + _rng.randf_range(-0.15, 0.15) * exp(-t * 40.0)
+		werte[i] = s * minf(1.0, t * 900.0) * exp(-t * 11.0)
+	return _wav(werte)
+
+
+## Treffer auf die Hülle: dumpfer Schlag mit Knirschen — klingt bedrohlicher als der Schild.
+func _treffer_huelle(dauer: float) -> AudioStreamWAV:
+	var n := int(dauer * RATE)
+	var werte := PackedFloat32Array()
+	werte.resize(n)
+	var tp := 0.0
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		tp += (_rng.randf_range(-1.0, 1.0) - tp) * 0.18
+		phase = fmod(phase + lerpf(85.0, 40.0, t / dauer) / RATE, 1.0)
+		var knirschen := tp * (1.0 if fmod(t * 37.0, 1.0) < 0.6 else 0.3)
+		werte[i] = (sin(TAU * phase) * 1.1 + knirschen * 1.4) * minf(1.0, t * 600.0) * exp(-t * 9.0)
+	return _wav(werte)
+
+
+## Musik: düstere Synth-Schleife wie in Descent, 120 BPM, 8 Takte Am–F–C–G (je zwei Takte):
+## Bass in Achteln, weiche Fläche, Arpeggio in Sechzehnteln, Bassdrum auf 1 und 3, leise Hi-Hat.
+func _musik_bauen() -> AudioStreamWAV:
+	var r := MUSIK_RATE
+	var takt := 2.0
+	var n := int(8 * takt * r)
+	var werte := PackedFloat32Array()
+	werte.resize(n)
+	var grund := [110.0, 110.0, 87.31, 87.31, 130.81, 130.81, 98.0, 98.0]
+	var akkord := [[0, 3, 7], [0, 3, 7], [0, 4, 7], [0, 4, 7], [0, 4, 7], [0, 4, 7], [0, 4, 7], [0, 4, 7]]
+	var bass_p := 0.0
+	var pad_p := [0.0, 0.0, 0.0, 0.0]
+	var arp_p := 0.0
+	var kick_p := 0.0
+	var bass_tp := 0.0
+	var pad_tp := 0.0
+	var arp_tp := 0.0
+	var hat_tp := 0.0
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 99
+	for i in n:
+		var t := float(i) / r
+		var tk := int(t / takt) % 8
+		var g: float = grund[tk]
+		var ak: Array = akkord[tk]
+		# Bass: Sägezahn eine Oktave tiefer, Achtel mit Abklingen
+		var achtel := fmod(t, 0.25)
+		bass_p = fmod(bass_p + g * 0.5 / r, 1.0)
+		bass_tp += ((bass_p * 2.0 - 1.0) - bass_tp) * 0.06
+		var bass := bass_tp * exp(-achtel * 6.0) * 0.9
+		# Fläche: zwei leicht verstimmte Sägezähne je Akkordton (Grundton + Terz), stark gefiltert
+		var pad := 0.0
+		for k in 2:
+			var f: float = g * 2.0 * pow(2.0, ak[k] / 12.0)
+			pad_p[k * 2] = fmod(pad_p[k * 2] + f / r, 1.0)
+			pad_p[k * 2 + 1] = fmod(pad_p[k * 2 + 1] + f * 1.006 / r, 1.0)
+			pad += pad_p[k * 2] + pad_p[k * 2 + 1] - 1.0
+		pad_tp += (pad - pad_tp) * 0.025
+		var pad_huelle := 0.6 + 0.4 * sin(TAU * t / (takt * 2.0))
+		# Arpeggio: Rechteck, Sechzehntel durch die Akkordtöne, zwei Oktaven höher
+		var sech := int(t / 0.125)
+		var ton: int = ak[sech % 3] + (12 if (sech / 3) % 2 == 1 else 0)
+		arp_p = fmod(arp_p + g * 4.0 * pow(2.0, ton / 12.0) / r, 1.0)
+		arp_tp += ((1.0 if arp_p < 0.5 else -1.0) - arp_tp) * 0.12
+		var arp := arp_tp * exp(-fmod(t, 0.125) * 18.0) * 0.28
+		# Bassdrum auf 1 und 3 (jede zweite Viertel), Hi-Hat auf den Achtel-Zwischenschlägen
+		var halbe := fmod(t, 1.0)
+		kick_p = fmod(kick_p + lerpf(120.0, 42.0, minf(halbe / 0.15, 1.0)) / r, 1.0)
+		var kick := sin(TAU * kick_p) * exp(-halbe * 18.0) * 0.9
+		hat_tp += (rng.randf_range(-1.0, 1.0) - hat_tp) * 0.9
+		var hat := (rng.randf_range(-1.0, 1.0) - hat_tp) * exp(-fmod(t + 0.25, 0.5) * 60.0) * 0.12
+		werte[i] = bass + pad_tp * 0.35 * pad_huelle + arp + kick + hat
+	var w := _wav(werte, r)
+	w.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	w.loop_begin = 0
+	w.loop_end = n
+	return w
+
+
+func _wav(werte: PackedFloat32Array, rate := RATE) -> AudioStreamWAV:
 	var spitze := 0.0001
 	for v in werte:
 		spitze = maxf(spitze, absf(v))
@@ -185,7 +327,7 @@ func _wav(werte: PackedFloat32Array) -> AudioStreamWAV:
 		daten.encode_s16(i * 2, int(clampf(werte[i] / spitze * 0.9, -1.0, 1.0) * 32767.0))
 	var w := AudioStreamWAV.new()
 	w.format = AudioStreamWAV.FORMAT_16_BITS
-	w.mix_rate = RATE
+	w.mix_rate = rate
 	w.stereo = false
 	w.data = daten
 	return w
