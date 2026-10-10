@@ -7,6 +7,10 @@ signal beenden
 signal optionen
 
 const ORANGE := Color(1.0, 0.6, 0.2)
+const ART_FARBE := {"kampf": Color(1.0, 0.35, 0.3), "ueberleben": Color(0.4, 0.75, 1.0),
+	"wirtschaft": Color(1.0, 0.82, 0.3), "werkzeuge": Color(0.35, 0.95, 0.85)}
+
+var _reiter := "schiff"          ## gewählter Aufrüstungs-Reiter, bleibt über Käufe hinweg
 
 
 func _init() -> void:
@@ -44,8 +48,9 @@ func aufbauen() -> void:
 	spalte.custom_minimum_size = Vector2(1500, 0)
 	mitte.add_child(spalte)
 
-	spalte.add_child(_label("ABSTIEG", 84, ORANGE, true))
-	spalte.add_child(_label("Endlose Minen. Zerstöre den Reaktor, entkomme, steig tiefer.", 22, Color(0.8, 0.75, 0.65), true))
+	# Titel kleiner als früher (84), damit Reiter, Starttiefe und alle Hilfszeilen bei 1080 px Höhe Platz haben
+	spalte.add_child(_label("ABSTIEG", 60, ORANGE, true))
+	spalte.add_child(_label("Endlose Minen. Zerstöre den Reaktor, entkomme, steig tiefer.", 19, Color(0.8, 0.75, 0.65), true))
 	spalte.add_child(_label("Erz in der Bank: %d     ·     Rekordtiefe: %d     ·     Läufe: %d" % [
 		Meta.bank, Meta.rekord, Meta.laeufe], 24, Color(1.0, 0.85, 0.35), true))
 	# Spielzeit wie bei Steam
@@ -67,13 +72,15 @@ func aufbauen() -> void:
 	_waffen_spalte(rechts)
 	links.add_child(_label("AUFRÜSTUNGEN — bleiben nach dem Tod", 22, ORANGE, false))
 	var erster: Button = null
+	_reiter_zeile(links)
 	var raster := GridContainer.new()
 	raster.columns = 2
 	raster.add_theme_constant_override("h_separation", 10)
 	raster.add_theme_constant_override("v_separation", 10)
 	links.add_child(raster)
 	for a in Meta.AUFRUESTUNGEN:
-		raster.add_child(_aufruestkarte(a))
+		if a.art == _reiter:
+			raster.add_child(_aufruestkarte(a))
 	_info = _label("Steuerkreuz/Maus auf eine Karte: Name und Werte erscheinen hier.", 17, Color(0.7, 0.68, 0.6), true)
 	_info.custom_minimum_size = Vector2(0, 52)
 	_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -110,8 +117,8 @@ func aufbauen() -> void:
 	spalte.add_child(ende)
 	spalte.add_child(_label(
 		"Maus drehen · WASD fliegen · Leertaste/Strg hoch/runter · Q/E rollen · Linke Maustaste Laser · Rechte Rakete\n" +
-		"1–4 Laser wählen · 5–8 Rakete wählen · Tab Leitstrahl · F Scheinwerfer · Esc Pause\n" +
-		"Controller: linker Stick fliegen · rechter Stick drehen · LB/RB rollen · A/B hoch/runter · RT Laser · LT Rakete · Steuerkreuz ←→ Laser, ↑↓ Rakete",
+		"1–4 Laser wählen · 5–8 Rakete wählen · Umschalt Nachbrenner · Tab Leitstrahl · F Scheinwerfer · Esc Pause\n" +
+		"Controller: linker Stick fliegen · rechter Stick drehen · LB/RB rollen · A/B hoch/runter · RT Laser · LT Rakete · X Nachbrenner · Steuerkreuz ←→ Laser, ↑↓ Rakete · Hangar: LB/RB Reiter",
 		16, Color(0.6, 0.58, 0.52), true))
 	# Nach einem Kauf bleibt der Fokus auf demselben Knopf (Controller), sonst auf "Abstieg beginnen".
 	var ziel: Control = erster
@@ -166,10 +173,81 @@ const AUF_FARBE := {"schild": Color(0.35, 0.65, 1.0), "panzerung": Color(1.0, 0.
 	"triebwerk": Color(0.4, 1.0, 0.6), "raketen": Color(1.0, 0.4, 0.35)}
 
 
+## Reiter nach Art: Schiff · Kampf · Überleben · Wirtschaft · Werkzeuge. Mit LB/RB oder Steuerkreuz wechselbar.
+## Gesperrte Reiter (noch kein Boss) sind wählbar und zeigen, ab wann sie freigeschaltet werden.
+func _reiter_zeile(links: VBoxContainer) -> void:
+	var reihe := HBoxContainer.new()
+	reihe.name = "Reiter"
+	reihe.add_theme_constant_override("separation", 6)
+	links.add_child(reihe)
+	var gruppe := ButtonGroup.new()
+	for r in Meta.REITER:
+		var id: String = r[0]
+		var b := Button.new()
+		b.name = "Reiter_" + id
+		var neu := 0
+		var frei := false
+		for a in Meta.AUFRUESTUNGEN:
+			if a.art == id:
+				frei = frei or Meta.freigeschaltet(a.id)
+				if Meta.kaufbar(a.id):
+					neu += 1
+		b.text = r[1] + (" · %d" % neu if neu > 0 else "")
+		if not frei:
+			b.add_theme_color_override("font_color", Color(0.45, 0.45, 0.45))
+		b.toggle_mode = true
+		b.button_group = gruppe
+		b.button_pressed = id == _reiter
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.custom_minimum_size = Vector2(0, 36)
+		b.add_theme_font_size_override("font_size", 16)
+		var farbe: Color = ART_FARBE.get(id, ORANGE)
+		var gedrueckt := StyleBoxFlat.new()
+		gedrueckt.bg_color = Color(farbe.r * 0.22, farbe.g * 0.22, farbe.b * 0.22)
+		gedrueckt.set_border_width_all(2)
+		gedrueckt.border_color = farbe
+		var normal := b.get_theme_stylebox("normal")
+		for seite in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
+			gedrueckt.set_content_margin(seite, normal.get_content_margin(seite))
+		b.add_theme_stylebox_override("pressed", gedrueckt)
+		b.add_theme_stylebox_override("hover_pressed", gedrueckt)
+		b.add_theme_color_override("font_pressed_color", farbe)
+		b.add_theme_color_override("font_hover_pressed_color", farbe)
+		b.tooltip_text = "Kaufbar: %d" % neu if frei else "Wird mit einem besiegten Boss freigeschaltet."
+		b.pressed.connect(func(): reiter_waehlen(id))
+		reihe.add_child(b)
+
+
+func reiter_waehlen(id: String) -> void:
+	if id == _reiter:
+		return
+	_reiter = id
+	_fokus_merken = "Reiter_" + id
+	aufbauen()
+
+
+func _unhandled_input(e: InputEvent) -> void:
+	if not is_visible_in_tree():
+		return
+	var schritt := 0
+	if e.is_action_pressed("rollen_rechts"):
+		schritt = 1
+	elif e.is_action_pressed("rollen_links"):
+		schritt = -1
+	if schritt == 0:
+		return
+	var ids: Array = Meta.REITER.map(func(r): return r[0])
+	reiter_waehlen(ids[(ids.find(_reiter) + schritt + ids.size()) % ids.size()])
+	get_viewport().set_input_as_handled()
+
+
 ## Aufrüstung als Karte wie die Waffen: Stufenpunkte, Symbol, Kaufknopf; Wirkung im Tooltip.
 func _aufruestkarte(a: Dictionary) -> Control:
 	var st := Meta.stufe(a.id)
-	var farbe: Color = AUF_FARBE.get(a.id, ORANGE)
+	var farbe: Color = AUF_FARBE.get(a.id, ART_FARBE.get(a.art, ORANGE))
+	var frei := Meta.freigeschaltet(a.id)
+	if not frei:
+		farbe = farbe.lerp(Color(0.45, 0.45, 0.45), 0.7)
 	var karte := PanelContainer.new()
 	karte.custom_minimum_size = Vector2(250, 0)
 	karte.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -189,11 +267,13 @@ func _aufruestkarte(a: Dictionary) -> Control:
 	spalte.add_theme_constant_override("separation", 4)
 	karte.add_child(spalte)
 	# Stufenpunkte: gefüllt = gekauft
-	var punkte := _label("●".repeat(st) + "○".repeat(int(a.max) - st), 15, farbe, true)
+	var mx := int(a.max)
+	var meister := Meta.meisterstufe(a.id)
+	var punkte := _label("●".repeat(mini(st, mx)) + "○".repeat(maxi(mx - st, 0)) + ("   Meister %d" % meister if meister > 0 else ""), 15, farbe, true)
 	punkte.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	spalte.add_child(punkte)
 	var sym := WaffenSymbol.new("auf_" + a.id, farbe)
-	sym.custom_minimum_size = Vector2(0, 70)
+	sym.custom_minimum_size = Vector2(0, 58)
 	spalte.add_child(sym)
 	var b := Button.new()
 	b.custom_minimum_size = Vector2(0, 36)
@@ -201,9 +281,15 @@ func _aufruestkarte(a: Dictionary) -> Control:
 	var id: String = a.id
 	b.name = "Knopf_" + id
 	var tip := _aufruest_tooltip(a, st)
-	if Meta.ausgereizt(id):
+	if not frei:
+		b.text = "gesperrt · Boss %d" % int(a.boss)
+		_knopf(b, false, tip, func(): return false, "Gesperrt: erst Boss %d besiegen" % int(a.boss))
+	elif Meta.ausgereizt(id):
 		b.text = "ausgebaut"
 		_knopf(b, false, tip, func(): return false, "Schon ganz ausgebaut")
+	elif st >= mx:
+		b.text = "Meister · %d" % Meta.kosten(id)
+		_knopf(b, Meta.kaufbar(id), tip, func(): return Meta.kaufen(id), "Zu wenig Erz")
 	else:
 		b.text = "Kaufen · %d" % Meta.kosten(id)
 		_knopf(b, Meta.kaufbar(id), tip, func(): return Meta.kaufen(id), "Zu wenig Erz")
@@ -214,17 +300,15 @@ func _aufruestkarte(a: Dictionary) -> Control:
 
 
 func _aufruest_tooltip(a: Dictionary, st: int) -> String:
-	var jetzt := Meta.schiffswerte()
-	var zeilen: Array[String] = ["%s   Stufe %d/%d" % [a.name, st, a.max], a.text + " je Stufe"]
-	match a.id:
-		"schild":
-			zeilen.append("Schild jetzt %d%s" % [jetzt.schild_max, (" → %d" % (jetzt.schild_max + 25)) if st < a.max else ""])
-		"panzerung":
-			zeilen.append("Hülle jetzt %d%s" % [jetzt.huelle_max, (" → %d" % (jetzt.huelle_max + 25)) if st < a.max else ""])
-		"triebwerk":
-			zeilen.append("Tempo jetzt %.1f m/s%s" % [jetzt.tempo, (" → %.1f" % (14.0 * (1.0 + 0.08 * (st + 1)))) if st < a.max else ""])
-		"raketen":
-			zeilen.append("Raketen jetzt %d%s" % [jetzt.raketen_max, (" → %d" % (jetzt.raketen_max + 2)) if st < a.max else ""])
+	var mx := int(a.max)
+	var stand := "Stufe %d/%d" % [mini(st, mx), mx] + (" · Meister %d" % (st - mx) if st > mx else "")
+	var zeilen: Array[String] = ["%s   %s" % [a.name, stand], a.text + " je Stufe"]
+	var naechste := "" if Meta.ausgereizt(a.id) else " → " + Meta.wirkung_text(a.id, st + 1)
+	zeilen.append("Jetzt: %s%s" % [Meta.wirkung_text(a.id, st), naechste])
+	if Meta.hat_meisterschaft(a.id):
+		zeilen.append("Nach Stufe %d endlos weiter als Meisterschaft" % mx)
+	if not Meta.freigeschaltet(a.id):
+		zeilen.append("Gesperrt bis Boss %d besiegt ist" % int(a.boss))
 	return "\n".join(zeilen)
 
 

@@ -21,6 +21,7 @@ func _ready() -> void:
 	_aktion("leitstrahl", [KEY_TAB], [JOY_BUTTON_BACK], [])
 	_aktion("licht", [KEY_F], [JOY_BUTTON_Y], [])
 	_aktion("pause", [KEY_ESCAPE], [JOY_BUTTON_START], [])
+	_aktion("nachbrenner", [KEY_SHIFT], [JOY_BUTTON_X], [])
 	# Menüs mit dem Gamepad (GameSir am Handy): Godot belegt Bestätigen/Zurück nicht von selbst mit A/B.
 	_aktion("ui_accept", [], [JOY_BUTTON_A], [])
 	_aktion("ui_cancel", [], [JOY_BUTTON_B], [])

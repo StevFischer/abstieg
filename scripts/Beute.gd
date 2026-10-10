@@ -118,6 +118,7 @@ func _ready() -> void:
 	l.light_energy = 1.0
 	add_child(l)
 	add_to_group("beute_" + art)
+	add_to_group("beute")
 	body_entered.connect(_rein)
 
 

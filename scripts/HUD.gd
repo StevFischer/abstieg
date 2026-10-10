@@ -27,6 +27,8 @@ var _abschluss_tw: Tween
 var _blitz: ColorRect
 var _zeichnung: Control
 
+var radar_punkte: Array = []   ## [Bildschirmposition, am Rand?] je Gegner im Radar
+var nachbrenner := ""            ## Anzeige des Nachbrenners, leer = nicht gekauft
 var leit_an := false
 var leit_pos := Vector2.ZERO
 var leit_rand := false
@@ -339,6 +341,16 @@ func _zeichnen() -> void:
 		_zeichnung.draw_line(m + r * 7.0, m + r * 30.0, f, 2.0)
 	_zeichnung.draw_arc(m, 22.0, 0.0, TAU, 48, f, 2.0, true)
 	_zeichnung.draw_circle(m, 1.6, f)
+	# Gegnerradar: rote Rauten, am Rand kleiner
+	for p in radar_punkte:
+		var g: float = 8.0 if p[1] else 12.0
+		var q: Vector2 = p[0]
+		_zeichnung.draw_polyline(PackedVector2Array([q + Vector2(0, -g), q + Vector2(g, 0), q + Vector2(0, g),
+			q + Vector2(-g, 0), q + Vector2(0, -g)]), Color(1.0, 0.25, 0.2, 0.85), 2.5)
+	if nachbrenner != "":
+		var nb_farbe := GELB if nachbrenner == "NACHBRENNER" else (GRUEN if nachbrenner.ends_with("bereit") else Color(0.6, 0.6, 0.6))
+		_zeichnung.draw_string(ThemeDB.fallback_font, m + Vector2(-120, 120), nachbrenner,
+			HORIZONTAL_ALIGNMENT_CENTER, 240, 16, nb_farbe)
 	if not leit_an:
 		return
 	var c := Color(0.4, 1.0, 0.6, 0.9)

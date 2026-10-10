@@ -107,6 +107,9 @@ func _starte_lauf() -> void:
 	schiff.gestorben.connect(func(): _schiff_tot("Schiff zerstört"))
 	schiff.getroffen.connect(func(s: float): hud.blitz(s))
 	schiff.erz_gefunden.connect(func(m: int): level_erz += m)
+	schiff.notschild_ausgeloest.connect(func():
+		hud.mitteilung("NOTSCHILD!", 1.8, HUD.BLAU)
+		Protokoll.schreib("lauf", "Notschild ausgelöst auf Tiefe %d, übrig %d" % [tiefe, schiff.notschild]))
 	schiff.aufgenommen.connect(func(art: String, m: int):
 		hud.aufnahme(Beute.beschriftung(art, m), Beute.ARTEN[art].farbe.lerp(Color.WHITE, 0.3)))
 	schiff.voll.connect(func(art: String):
@@ -157,6 +160,11 @@ func _lade_level() -> void:
 	_umgebung_setzen()
 	Meta.rekord = maxi(Meta.rekord, tiefe)
 	Meta.speichern()
+	# Reparaturdrohne: zu Beginn jeder Tiefe Hülle zurück
+	var rep := float(Meta.schiffswerte().reparatur)
+	if schiff and rep > 0.0 and schiff.huelle < schiff.huelle_max:
+		schiff.huelle = minf(schiff.huelle_max, schiff.huelle + rep)
+		Protokoll.schreib("lauf", "Reparaturdrohne: Hülle +%.0f → %.0f" % [rep, schiff.huelle])
 
 	var sr := gen.raeume[gen.start_raum]
 	var start_pos := LevelGen.welt_von(sr.pos)
@@ -330,13 +338,18 @@ func _gegner_weg(g: Gegner) -> void:
 		hud.mitteilung("%s BESIEGT\nReaktor ungeschützt" % g.boss_name(), 2.5, HUD.GELB)
 		Protokoll.schreib("level", "Boss %s besiegt auf Tiefe %d" % [g.boss_name(), tiefe])
 		boss = null
-	if _rng.randf() < 0.2:
+	if _rng.randf() < beute_chance():
 		var art: String = ["schild", "reparatur", "rakete"][_rng.randi_range(0, 2)]
 		level.add_child.call_deferred(Beute.neu(art, g.global_position + Vector3(0, 1.2, 0)))
 
 
+## Chance, dass ein Gegner ein Fundstück fallen lässt: 20 % plus Bergungskralle.
+func beute_chance() -> float:
+	return 0.2 + float(Meta.schiffswerte().beute_bonus)
+
+
 func _reaktor_weg() -> void:
-	countdown = gen.fluchtzeit()
+	countdown = gen.fluchtzeit() * float(Meta.schiffswerte().flucht_mult)
 	_alarm_zeit = 0.0
 	_piep_t = 2.0                       # erst die Sirene, dann das Piepen
 	var klang := get_node("/root/Klang")
@@ -352,13 +365,18 @@ func _reaktor_weg() -> void:
 	Protokoll.schreib("level", "Reaktor zerstört auf Tiefe %d, Fluchtzeit %.0f s" % [tiefe, countdown])
 
 
+## Abschlussbonus einer Tiefe (Boss-Tiefen doppelt), mit Vertragsbonus.
+func abschluss_bonus(t: int) -> int:
+	return int(round((15 + 8 * t) * (2 if LevelGen.ist_boss_tiefe(t) else 1) * float(Meta.schiffswerte().abschluss_mult)))
+
+
 func _ausgang_erreicht() -> void:
 	if zustand != "flug":
 		return
 	zustand = "wechsel"
 	# Belohnung fürs Abschließen: Abschlussbonus (in Boss-Tiefen doppelt), 1 Erz je übrige Sekunde,
 	# Schild voll, Hülle +30, Raketen +2 — und eine Abrechnung auf dem Schirm.
-	var abschluss := (15 + 8 * tiefe) * (2 if LevelGen.ist_boss_tiefe(tiefe) else 1)
+	var abschluss := abschluss_bonus(tiefe)
 	var restzeit := maxi(int(countdown), 0)
 	var gesichert := level_erz
 	level_erz += abschluss + restzeit
@@ -435,6 +453,7 @@ func _process(dt: float) -> void:
 	if boss != null and is_instance_valid(boss):
 		hud.boss_wert(boss.hp, boss.hp_max)
 	_leitstrahl(dt)
+	_radar()
 	hud.werte(schiff)
 
 
@@ -481,6 +500,34 @@ func _leitstrahl(dt: float) -> void:
 	hud.leit_pos = mitte + r * k
 	hud.leit_rand = true
 	hud.leit_richtung = r
+
+
+## Gegnerradar: Gegner in Reichweite als Punkte im HUD, auch hinter Wänden; hinter der Kamera am Rand.
+func _radar() -> void:
+	hud.radar_punkte.clear()
+	var weite := float(Meta.schiffswerte().radar)
+	hud.nachbrenner = "" if schiff.nachbrenner_cd <= 0.0 else (
+		"NACHBRENNER" if schiff.boost_aktiv() else (
+		"Nachbrenner bereit" if schiff.nachbrenner_bereit <= 0.0 else "Nachbrenner %d s" % ceili(schiff.nachbrenner_bereit)))
+	if weite <= 0.0:
+		return
+	var cam := schiff.kamera
+	var vp := get_viewport().get_visible_rect().size
+	var mitte := vp / 2.0
+	for g: Gegner in get_tree().get_nodes_in_group("gegner"):
+		if g.global_position.distance_to(schiff.global_position) > weite or g.ist_getarnt():
+			continue
+		if not cam.is_position_behind(g.global_position):
+			var sp := cam.unproject_position(g.global_position)
+			if Rect2(Vector2.ZERO, vp).grow(-20.0).has_point(sp):
+				hud.radar_punkte.append([sp, false])
+				continue
+		var lokal := cam.global_transform.affine_inverse() * g.global_position
+		var r := Vector2(lokal.x, -lokal.y)
+		r = Vector2(0, 1) if r.length_squared() < 0.0001 else r.normalized()
+		var rand := mitte - Vector2(30, 30)
+		var k := minf(rand.x / maxf(absf(r.x), 0.0001), rand.y / maxf(absf(r.y), 0.0001))
+		hud.radar_punkte.append([mitte + r * k, true])
 
 
 # --- Pause --------------------------------------------------------------------
@@ -633,6 +680,10 @@ func _autotest() -> void:
 		return
 	if "--zeige-gegner" in OS.get_cmdline_user_args():
 		await _gegner_schau()
+		get_tree().quit(0)
+		return
+	if "--aufwertungs-test" in OS.get_cmdline_user_args():
+		await _aufwertungs_test()
 		get_tree().quit(0)
 		return
 	if "--starttiefe-test" in OS.get_cmdline_user_args():
@@ -1433,6 +1484,165 @@ func _gegner_schau() -> void:
 		schiff.unverwundbar = true
 
 
+## Neue Aufrüstungen: jede einzeln im Spiel gemessen, dazu Meisterschaft, Sperren und Hangar-Reiter.
+func _aufwertungs_test() -> void:
+	var erg: Array[String] = []
+	var ok := true
+	var pruef := func(name: String, gut: bool, text: String):
+		erg.append("%s %s: %s" % ["ok  " if gut else "FEHL", name, text])
+		return gut
+	# Sperren und Meisterschaft
+	Meta.zuruecksetzen()
+	Meta.rekord = 4
+	ok = pruef.call("Sperre", not Meta.freigeschaltet("erzausbeute") and Meta.freigeschaltet("laserschaden") and not Meta.freigeschaltet("radar"),
+		"Rekord 4: Wirtschaft %s, Kampf %s, Werkzeuge %s" % [Meta.freigeschaltet("erzausbeute"), Meta.freigeschaltet("laserschaden"), Meta.freigeschaltet("radar")]) and ok
+	Meta.rekord = 16
+	Meta.bank = 999999
+	Meta.stufen = {"laserschaden": 10}
+	var k_soll := int(round(50 * pow(1.6, 8) * pow(1.15, 2)))
+	ok = pruef.call("Meisterschaft", is_equal_approx(Meta.wert("laserschaden"), 0.84) and Meta.kosten("laserschaden") == k_soll and Meta.kaufbar("laserschaden"),
+		"Stufe 10 (8 + Meister 2) → +%.0f %% Schaden, nächste kostet %d (soll %d), kaufbar %s" % [Meta.wert("laserschaden") * 100, Meta.kosten("laserschaden"), k_soll, Meta.kaufbar("laserschaden")]) and ok
+	ok = pruef.call("Ohne Meister", Meta.stufen.size() == 1 and (func(): Meta.stufen["magnet"] = 3; return Meta.ausgereizt("magnet")).call(),
+		"Magnet Stufe 3/3 ausgereizt") and ok
+	# Alles auf eine Teststufe
+	Meta.stufen = {"laserschaden": 3, "feuerrate": 5, "raketenschaden": 2, "kritisch": 6, "schildladen": 5, "schildpause": 5,
+		"reparatur": 2, "notschild": 1, "erzausbeute": 5, "beutechance": 5, "magnet": 2, "abschluss": 4,
+		"nachbrenner": 3, "fluchtzeit": 5, "radar": 1}
+	Meta.start_tiefe = 1
+	Meta.speichern()
+	_starte_lauf()
+	await _warte(1.0)
+	for g in get_tree().get_nodes_in_group("gegner"):
+		g.free()
+	for b in get_tree().get_nodes_in_group("beute"):
+		b.free()
+	schiff.unverwundbar = true
+	var neue := func() -> Array:
+		var aus := []
+		for k in level.get_children():
+			if k is Geschoss and k.vom_spieler and not k.has_meta("alt"):
+				k.set_meta("alt", true)
+				aus.append(k)
+		return aus
+	neue.call()
+	# Laserschaden und Feuerrate (ohne Zielrechner)
+	var krit := schiff.krit
+	schiff.krit = 0.0
+	schiff.laser_wahl = "zwilling"
+	schiff.laser_schuss()
+	var gs: Array = neue.call()
+	var w := Waffen.finde("zwilling")
+	ok = pruef.call("Laserschaden", gs.size() == 1 and is_equal_approx(gs[0].schaden, w.schaden * 1.3),
+		"Zwilling %.1f statt %.1f (+30 %%)" % [gs[0].schaden if gs else 0.0, w.schaden]) and ok
+	ok = pruef.call("Feuerrate", is_equal_approx(schiff._laser_cd, w.cd / 1.3), "Abklingzeit %.3f s statt %.3f s" % [schiff._laser_cd, w.cd]) and ok
+	schiff.raketen_schuss()
+	gs = neue.call()
+	var rw := Waffen.finde(schiff.rakete_wahl)
+	ok = pruef.call("Raketenschaden", gs.size() >= 1 and is_equal_approx(gs[0].schaden, rw.schaden * 1.24),
+		"%s %.1f statt %.1f (+24 %%)" % [rw.id, gs[0].schaden if gs else 0.0, rw.schaden]) and ok
+	# Zielrechner: 400 Schüsse, Anteil doppelter Schaden
+	schiff.krit = krit
+	var doppelt := 0
+	for i in 400:
+		schiff.laser_schuss()
+		for g in neue.call():
+			if g.schaden > w.schaden * 1.3 * 1.5:
+				doppelt += 1
+			g.free()
+	ok = pruef.call("Zielrechner", doppelt > 400 * 0.17 and doppelt < 400 * 0.31, "%d von 400 doppelt (soll ~24 %%)" % doppelt) and ok
+	# Schild
+	schiff.velocity = Vector3.ZERO
+	schiff.schild = 0.0
+	schiff._seit_treffer = schiff.schild_pause + 0.01
+	schiff.schild_laden(1.0)
+	ok = pruef.call("Schildlader", is_equal_approx(schiff.schild, 1.5 * 2.0 * 3.0), "im Stand %.1f je s statt 4,5" % schiff.schild) and ok
+	ok = pruef.call("Schnellstart", is_equal_approx(schiff.schild_pause, 3.0), "Pause %.1f s statt 5,0" % schiff.schild_pause) and ok
+	# Notschild
+	schiff.unverwundbar = false
+	schiff.treffer(1.0e6)
+	ok = pruef.call("Notschild", schiff.aktiv and is_equal_approx(schiff.huelle, 1.0) and schiff.schild == schiff.schild_max and schiff.notschild == 0,
+		"nach tödlichem Treffer aktiv %s, Hülle %.0f, Schild %.0f/%.0f, übrig %d" % [schiff.aktiv, schiff.huelle, schiff.schild, schiff.schild_max, schiff.notschild]) and ok
+	schiff.unverwundbar = true
+	# Reparaturdrohne: neue Tiefe lädt
+	schiff.huelle = 50.0
+	_lade_level()
+	await _warte(1.0)
+	for g in get_tree().get_nodes_in_group("gegner"):
+		g.free()
+	for b in get_tree().get_nodes_in_group("beute"):
+		b.free()
+	ok = pruef.call("Reparaturdrohne", is_equal_approx(schiff.huelle, 70.0), "Hülle 50 → %.0f beim Laden der Tiefe (+20)" % schiff.huelle) and ok
+	# Raffinerie
+	var e0 := level_erz
+	schiff.aufnehmen("erz", 10)
+	ok = pruef.call("Raffinerie", level_erz - e0 == 15, "10 Erz aufgenommen → +%d (+50 %%)" % (level_erz - e0)) and ok
+	ok = pruef.call("Bergungskralle", is_equal_approx(beute_chance(), 0.4), "Beutechance %.0f %% statt 20 %%" % (beute_chance() * 100)) and ok
+	ok = pruef.call("Vertragsbonus", abschluss_bonus(3) == int(round(39 * 1.6)), "Tiefe 3: %d statt 39 (+60 %%)" % abschluss_bonus(3)) and ok
+	# Erzmagnet (Stufe 2 = 9 m): Erz in 8 m kommt, Erz in 12 m bleibt
+	schiff.velocity = Vector3.ZERO
+	var x := schiff.global_basis.x
+	var nah := Beute.neu("erz", schiff.global_position + x * 8.0)
+	var fern := Beute.neu("erz", schiff.global_position - x * 12.0)
+	level.add_child(nah)
+	level.add_child(fern)
+	await _warte(1.5)
+	ok = pruef.call("Erzmagnet", not is_instance_valid(nah) and is_instance_valid(fern),
+		"Magnet %.0f m: Erz in 8 m eingesammelt %s, in 12 m liegen %s" % [schiff.magnet, not is_instance_valid(nah), is_instance_valid(fern)]) and ok
+	if is_instance_valid(fern):
+		fern.free()
+	# Nachbrenner: Tempo im Flug mit und ohne
+	Input.action_press("vor")
+	await _warte(1.2)
+	var v1 := schiff.velocity.length()
+	var gezuendet := schiff.nachbrenner_zuenden()
+	await _warte(0.9)
+	var v2 := schiff.velocity.length()
+	var zweiter := schiff.nachbrenner_zuenden()
+	Input.action_release("vor")
+	ok = pruef.call("Nachbrenner", gezuendet and not zweiter and v2 > v1 * 1.6 and is_equal_approx(schiff.nachbrenner_cd, 6.0),
+		"Tempo %.1f → %.1f m/s, sofort erneut zündbar %s, Abklingzeit %.1f s (soll 6)" % [v1, v2, zweiter, schiff.nachbrenner_cd]) and ok
+	_foto("aufwertung_nachbrenner")
+	await _warte(1.0)
+	schiff.velocity = Vector3.ZERO
+	# Gegnerradar (Stufe 1 = 25 m): Gegner in 20 m angezeigt, in 40 m nicht
+	var vor := (-schiff.global_basis.z * 20.0 + schiff.global_basis.x * 7.0).normalized()   # seitlich, nicht unterm Fadenkreuz
+	var g_nah := _testgegner("waechter", schiff.global_position + vor * 20.0, false)
+	await _warte(0.3)
+	var n_nah := hud.radar_punkte.size()
+	g_nah.global_position = schiff.global_position + vor * 40.0
+	await _warte(0.3)
+	var n_fern := hud.radar_punkte.size()
+	g_nah.global_position = schiff.global_position + vor * 20.0
+	await _warte(0.3)
+	_foto("aufwertung_radar")
+	g_nah.free()
+	ok = pruef.call("Gegnerradar", n_nah == 1 and n_fern == 0, "Gegner in 20 m: %d Punkt(e), in 40 m: %d" % [n_nah, n_fern]) and ok
+	# Kühlstäbe: Fluchtzeit nach dem Reaktor
+	_reaktor_weg()
+	ok = pruef.call("Kühlstäbe", is_equal_approx(countdown, gen.fluchtzeit() * 1.5), "Fluchtzeit %.1f s statt %.1f s (+50 %%)" % [countdown, gen.fluchtzeit()]) and ok
+	# Hangar: Reiter per RB durchschalten
+	_zeige_hangar()
+	await _warte(0.6)
+	_foto("aufwertung_hangar_schiff")
+	var gesehen := []
+	for i in 5:
+		await _knopf_druck(JOY_BUTTON_RIGHT_SHOULDER)
+		await _warte(0.3)
+		gesehen.append(hangar._reiter)
+		_foto("aufwertung_hangar_%s" % hangar._reiter)
+	ok = pruef.call("Reiter", gesehen == ["kampf", "ueberleben", "wirtschaft", "werkzeuge", "schiff"], "RB schaltet %s" % [gesehen]) and ok
+	Meta.rekord = 4
+	hangar.reiter_waehlen("wirtschaft")
+	await _warte(0.4)
+	var k := hangar.find_child("Knopf_erzausbeute", true, false) as Button
+	_foto("aufwertung_hangar_gesperrt")
+	ok = pruef.call("Gesperrt im Hangar", k != null and k.text.begins_with("gesperrt"), "Raffinerie bei Rekord 4: \"%s\"" % (k.text if k else "?")) and ok
+	for e in erg:
+		Protokoll.schreib("test", "Aufwertung: " + e)
+	Protokoll.schreib("test", "AUFWERTUNGS-TEST %s" % ("BESTANDEN" if ok else "FEHLGESCHLAGEN"))
+	Meta.zuruecksetzen()     # Teststände nicht in den nächsten Test mitnehmen (gemeinsamer Autotest-Spielstand)
+
+
 ## Starttiefe: welche Knöpfe es gibt, Wahl per Controller, Lauf beginnt in der gewählten Tiefe.
 func _starttiefe_test() -> void:
 	var ok := true
@@ -1487,6 +1697,7 @@ func _sammel_test() -> void:
 		g.free()
 	await _warte(1.0)
 	schiff.velocity = Vector3.ZERO
+	schiff.magnet = 0.0      # gemessen wird die Aufnahmekugel allein, ohne Erzmagnet
 	var x := schiff.global_basis.x
 	var nah := Beute.neu("erz", schiff.global_position + x * 4.3)
 	var fern := Beute.neu("erz", schiff.global_position - x * 5.0)

@@ -2,11 +2,32 @@ extends Node
 ## Roguelite-Fortschritt, der einen Tod überlebt: Erz in der Bank, gekaufte Aufrüstungen, Rekord.
 
 var _pfad := "user://abstieg_meta.cfg"
+## Aufrüstungen in fünf Reitern. Je Stufe wirkt "pro"; nach "max" folgt die endlose Meisterschaft
+## mit "meister" je Meisterstufe (0 = keine Meisterschaft). "boss": erst nach diesem besiegten Boss kaufbar.
+## Stev 2026-10-10: „viel mehr Aufwertungen für die Langzeitmotivation“ — Kampf, Überleben, Wirtschaft,
+## Werkzeuge; endlose Meisterschaft; an Bosse gekoppelt; Reiter nach Art.
+const REITER := [["schiff", "Schiff"], ["kampf", "Kampf"], ["ueberleben", "Überleben"],
+	["wirtschaft", "Wirtschaft"], ["werkzeuge", "Werkzeuge"]]
 const AUFRUESTUNGEN := [
-	{"id": "schild", "name": "Schildgenerator", "text": "+25 Schild", "kosten": 40, "max": 8},
-	{"id": "panzerung", "name": "Panzerung", "text": "+25 Hülle", "kosten": 40, "max": 8},
-	{"id": "triebwerk", "name": "Triebwerk", "text": "+8 % Tempo", "kosten": 45, "max": 5},
-	{"id": "raketen", "name": "Raketenschacht", "text": "+2 Raketen", "kosten": 30, "max": 6},
+	{"id": "schild", "art": "schiff", "name": "Schildgenerator", "text": "+25 Schild", "kosten": 40, "max": 8, "pro": 25.0, "meister": 5.0, "boss": 0},
+	{"id": "panzerung", "art": "schiff", "name": "Panzerung", "text": "+25 Hülle", "kosten": 40, "max": 8, "pro": 25.0, "meister": 5.0, "boss": 0},
+	{"id": "triebwerk", "art": "schiff", "name": "Triebwerk", "text": "+8 % Tempo", "kosten": 45, "max": 5, "pro": 0.08, "meister": 0.01, "boss": 0},
+	{"id": "raketen", "art": "schiff", "name": "Raketenschacht", "text": "+2 Raketen", "kosten": 30, "max": 6, "pro": 2.0, "meister": 1.0, "boss": 0},
+	{"id": "laserschaden", "art": "kampf", "name": "Laserverstärker", "text": "+10 % Laserschaden", "kosten": 50, "max": 8, "pro": 0.10, "meister": 0.02, "boss": 0},
+	{"id": "feuerrate", "art": "kampf", "name": "Schnellkühlung", "text": "+6 % Feuerrate der Laser", "kosten": 55, "max": 6, "pro": 0.06, "meister": 0.01, "boss": 0},
+	{"id": "raketenschaden", "art": "kampf", "name": "Sprengkopf", "text": "+12 % Raketenschaden", "kosten": 50, "max": 6, "pro": 0.12, "meister": 0.02, "boss": 0},
+	{"id": "kritisch", "art": "kampf", "name": "Zielrechner", "text": "+4 % Chance auf doppelten Schaden", "kosten": 70, "max": 6, "pro": 0.04, "meister": 0.005, "boss": 0},
+	{"id": "schildladen", "art": "ueberleben", "name": "Schildlader", "text": "+20 % Schild-Ladetempo", "kosten": 45, "max": 6, "pro": 0.20, "meister": 0.03, "boss": 0},
+	{"id": "schildpause", "art": "ueberleben", "name": "Schnellstart", "text": "Schild lädt 0,4 s früher", "kosten": 50, "max": 5, "pro": 0.4, "meister": 0.0, "boss": 0},
+	{"id": "reparatur", "art": "ueberleben", "name": "Reparaturdrohne", "text": "+10 Hülle zu Beginn jeder Tiefe", "kosten": 60, "max": 5, "pro": 10.0, "meister": 2.0, "boss": 0},
+	{"id": "notschild", "art": "ueberleben", "name": "Notschild", "text": "einmal je Lauf: tödlicher Treffer → 1 Hülle, Schild voll", "kosten": 300, "max": 2, "pro": 1.0, "meister": 0.0, "boss": 15},
+	{"id": "erzausbeute", "art": "wirtschaft", "name": "Raffinerie", "text": "+10 % Erz je Fund", "kosten": 80, "max": 8, "pro": 0.10, "meister": 0.02, "boss": 5},
+	{"id": "beutechance", "art": "wirtschaft", "name": "Bergungskralle", "text": "+4 % Chance, dass Gegner Beute fallen lassen", "kosten": 70, "max": 5, "pro": 0.04, "meister": 0.005, "boss": 5},
+	{"id": "magnet", "art": "wirtschaft", "name": "Erzmagnet", "text": "Beute fliegt zum Schiff: 6 m, je Stufe +3 m", "kosten": 90, "max": 3, "pro": 1.0, "meister": 0.0, "boss": 5},
+	{"id": "abschluss", "art": "wirtschaft", "name": "Vertragsbonus", "text": "+15 % Abschlussbelohnung", "kosten": 80, "max": 5, "pro": 0.15, "meister": 0.03, "boss": 5},
+	{"id": "nachbrenner", "art": "werkzeuge", "name": "Nachbrenner", "text": "Sprint ×2 für 1,5 s (Umschalt / X); Abklingzeit 9 s, je Stufe −1,5 s", "kosten": 120, "max": 4, "pro": 1.0, "meister": 0.0, "boss": 10},
+	{"id": "fluchtzeit", "art": "werkzeuge", "name": "Kühlstäbe", "text": "+10 % Fluchtzeit nach dem Reaktor", "kosten": 60, "max": 5, "pro": 0.10, "meister": 0.02, "boss": 10},
+	{"id": "radar", "art": "werkzeuge", "name": "Gegnerradar", "text": "zeigt Gegner durch Wände: 25 m, je Stufe +10 m", "kosten": 150, "max": 3, "pro": 1.0, "meister": 0.0, "boss": 10},
 ]
 
 var bank := 0
@@ -95,16 +116,68 @@ func _def(id: String) -> Dictionary:
 	return {}
 
 
+## Stufen über "max" sind Meisterstufen (nur wo "meister" > 0). Kosten: ×1,6 je Stufe bis zum Maximum,
+## danach ×1,15 je Meisterstufe — Erz hat so immer einen Zweck, der Zuwachs bleibt klein.
 func kosten(id: String) -> int:
-	return int(round(_def(id).kosten * pow(1.6, stufe(id))))
+	var a := _def(id)
+	var st := stufe(id)
+	var mx := int(a.max)
+	if st < mx:
+		return int(round(a.kosten * pow(1.6, st)))
+	return int(round(a.kosten * pow(1.6, mx) * pow(1.15, st - mx)))
+
+
+func meisterstufe(id: String) -> int:
+	return maxi(stufe(id) - int(_def(id).max), 0)
+
+
+func hat_meisterschaft(id: String) -> bool:
+	return float(_def(id).meister) > 0.0
+
+
+## Gesamtwirkung einer Aufrüstung: Stufen bis max × pro, darüber × meister.
+func wert(id: String) -> float:
+	var a := _def(id)
+	return mini(stufe(id), int(a.max)) * float(a.pro) + meisterstufe(id) * float(a.meister)
+
+
+## Wirkung bei einer bestimmten Stufe — für den Tooltip „jetzt → nächste Stufe“.
+func wert_bei(id: String, st: int) -> float:
+	var a := _def(id)
+	return mini(st, int(a.max)) * float(a.pro) + maxi(st - int(a.max), 0) * float(a.meister)
+
+
+## Lesbare Gesamtwirkung bei Stufe st, z. B. „+30 % Laserschaden“ oder „Radar 35 m“.
+func wirkung_text(id: String, st: int) -> String:
+	var w := wert_bei(id, st)
+	match id:
+		"schild": return "Schild %d" % int(50 + w)
+		"panzerung": return "Hülle %d" % int(100 + w)
+		"triebwerk": return "Tempo %.1f m/s" % (14.0 * (1.0 + w))
+		"raketen": return "Raketen %d" % (4 + int(w))
+		"schildpause": return "Schild lädt nach %.1f s" % (5.0 - w)
+		"reparatur": return "+%d Hülle je Tiefe" % int(w)
+		"notschild": return "%d Notschild je Lauf" % int(w)
+		"magnet": return "kein Magnet" if st == 0 else "Magnet %d m" % (6 + 3 * (st - 1))
+		"nachbrenner": return "kein Nachbrenner" if st == 0 else "Abklingzeit %.1f s" % (9.0 - 1.5 * (st - 1))
+		"radar": return "kein Radar" if st == 0 else "Radar %d m" % (25 + 10 * (st - 1))
+		"kritisch": return "%.1f %% Chance auf doppelten Schaden" % (w * 100.0)
+		"beutechance": return "Beutechance %.1f %%" % (20.0 + w * 100.0)
+	return "+%d %%" % int(round(w * 100.0))
+
+
+## Freigeschaltet, wenn der nötige Boss besiegt ist (Tiefe danach erreicht).
+func freigeschaltet(id: String) -> bool:
+	var b := int(_def(id).boss)
+	return b == 0 or rekord > b
 
 
 func ausgereizt(id: String) -> bool:
-	return stufe(id) >= int(_def(id).max)
+	return stufe(id) >= int(_def(id).max) and not hat_meisterschaft(id)
 
 
 func kaufbar(id: String) -> bool:
-	return not ausgereizt(id) and bank >= kosten(id)
+	return freigeschaltet(id) and not ausgereizt(id) and bank >= kosten(id)
 
 
 func kaufen(id: String) -> bool:
@@ -158,10 +231,25 @@ func waffe_verbessern(id: String) -> bool:
 
 func schiffswerte() -> Dictionary:
 	return {
-		"schild_max": 50.0 + 25.0 * stufe("schild"),
-		"huelle_max": 100.0 + 25.0 * stufe("panzerung"),
-		"tempo": 14.0 * (1.0 + 0.08 * stufe("triebwerk")),
-		"raketen_max": 4 + 2 * stufe("raketen"),
+		"schild_max": 50.0 + wert("schild"),
+		"huelle_max": 100.0 + wert("panzerung"),
+		"tempo": 14.0 * (1.0 + wert("triebwerk")),
+		"raketen_max": 4 + int(wert("raketen")),
+		"laser_mult": 1.0 + wert("laserschaden"),
+		"feuerrate": 1.0 + wert("feuerrate"),
+		"raketen_mult": 1.0 + wert("raketenschaden"),
+		"krit": minf(wert("kritisch"), 0.6),
+		"schild_laden": 1.0 + wert("schildladen"),
+		"schild_pause": 5.0 - wert("schildpause"),
+		"reparatur": wert("reparatur"),
+		"notschild": int(wert("notschild")),
+		"erz_mult": 1.0 + wert("erzausbeute"),
+		"beute_bonus": minf(wert("beutechance"), 0.5),
+		"magnet": 0.0 if stufe("magnet") == 0 else 6.0 + 3.0 * (stufe("magnet") - 1),
+		"abschluss_mult": 1.0 + wert("abschluss"),
+		"nachbrenner_cd": 0.0 if stufe("nachbrenner") == 0 else 9.0 - 1.5 * (stufe("nachbrenner") - 1),
+		"flucht_mult": 1.0 + wert("fluchtzeit"),
+		"radar": 0.0 if stufe("radar") == 0 else 25.0 + 10.0 * (stufe("radar") - 1),
 	}
 
 

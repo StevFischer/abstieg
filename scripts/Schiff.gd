@@ -8,6 +8,7 @@ signal erz_gefunden(menge: int)
 signal aufgenommen(art: String, menge: int)   ## für die HUD-Meldung
 signal voll(art: String)                       ## berührt, aber nicht gebraucht
 signal waffe_gewechselt(name: String)
+signal notschild_ausgeloest
 
 const MAUS := 0.0022
 const PAD_DREH := 2.0          ## Höchstdrehung mit dem Stick (rad/s); vorher 2,6 — Stev: Zielen mit Controller zu schwer
@@ -50,6 +51,21 @@ var _laser_cd := 0.0
 var _raketen_cd := 0.0
 var _seite := 1.0
 var _seit_treffer := 0.0
+## Aufrüstungen aus dem Hangar (Meta.schiffswerte), Grundwerte = ohne Aufrüstung.
+var laser_mult := 1.0
+var feuerrate := 1.0
+var raketen_mult := 1.0
+var krit := 0.0
+var schild_laden_mult := 1.0
+var schild_pause := SCHILD_PAUSE
+var notschild := 0              ## übrige Notschilde in diesem Lauf
+var erz_mult := 1.0
+var magnet := 0.0               ## Reichweite des Erzmagneten in m, 0 = keiner
+var nachbrenner_cd := 0.0       ## Abklingzeit, 0 = kein Nachbrenner
+var nachbrenner_bereit := 0.0   ## Restzeit bis zum nächsten Nachbrenner
+var _boost := 0.0
+const NACHBRENNER_DAUER := 1.5
+const NACHBRENNER_FAKTOR := 2.0
 var pad_aktiv := false          ## zuletzt mit dem Gamepad gesteuert → Zielhilfe an; Maus schaltet sie aus
 
 
@@ -84,6 +100,16 @@ func werte_setzen(w: Dictionary) -> void:
 	tempo = w.tempo
 	raketen_max = w.raketen_max
 	raketen = raketen_max
+	laser_mult = w.get("laser_mult", 1.0)
+	feuerrate = w.get("feuerrate", 1.0)
+	raketen_mult = w.get("raketen_mult", 1.0)
+	krit = w.get("krit", 0.0)
+	schild_laden_mult = w.get("schild_laden", 1.0)
+	schild_pause = w.get("schild_pause", SCHILD_PAUSE)
+	notschild = w.get("notschild", 0)
+	erz_mult = w.get("erz_mult", 1.0)
+	magnet = w.get("magnet", 0.0)
+	nachbrenner_cd = w.get("nachbrenner_cd", 0.0)
 
 
 func _unhandled_input(e: InputEvent) -> void:
@@ -133,19 +159,61 @@ func _physics_process(dt: float) -> void:
 
 	var ein := Vector3(Input.get_axis("links", "rechts"), Input.get_axis("runter", "hoch"),
 		Input.get_axis("vor", "zurueck")).limit_length(1.0)
-	var soll := transform.basis * ein * tempo
+	nachbrenner_bereit = maxf(nachbrenner_bereit - dt, 0.0)
+	_boost = maxf(_boost - dt, 0.0)
+	if Input.is_action_just_pressed("nachbrenner"):
+		nachbrenner_zuenden()
+	var soll := transform.basis * ein * tempo * (NACHBRENNER_FAKTOR if _boost > 0.0 else 1.0)
 	velocity = velocity.lerp(soll, 1.0 - exp(-2.5 * dt))
 	move_and_slide()
 	_waffen(dt)
 	schild_laden(dt)
+	_erzmagnet(dt)
+
+
+## Nachbrenner: doppeltes Tempo für 1,5 s, danach Abklingzeit. Gibt true zurück, wenn gezündet.
+func nachbrenner_zuenden() -> bool:
+	if nachbrenner_cd <= 0.0 or nachbrenner_bereit > 0.0:
+		return false
+	_boost = NACHBRENNER_DAUER
+	nachbrenner_bereit = nachbrenner_cd
+	var klang := get_tree().root.get_node_or_null("Klang")
+	if klang:
+		klang.spiele("piep", null, -14.0, 0.6)
+	return true
+
+
+func boost_aktiv() -> bool:
+	return _boost > 0.0
+
+
+## Erzmagnet: Beute in Reichweite fliegt zum Schiff — nur, was das Schiff gerade aufnehmen kann.
+func _erzmagnet(dt: float) -> void:
+	if magnet <= 0.0:
+		return
+	for b in get_tree().get_nodes_in_group("beute"):
+		var weg: Vector3 = global_position - b.global_position
+		if weg.length() < magnet and kann_nehmen(b.art):
+			b.global_position += weg.normalized() * minf(16.0 * dt, weg.length())
+
+
+func kann_nehmen(art: String) -> bool:
+	match art:
+		"schild":
+			return schild < schild_max
+		"reparatur":
+			return huelle < huelle_max
+		"rakete":
+			return raketen < raketen_max
+	return true
 
 
 func schild_laden(dt: float) -> void:
 	if not aktiv:
 		return
 	_seit_treffer += dt
-	if _seit_treffer >= SCHILD_PAUSE:
-		var rate := SCHILD_LADEN * (SCHILD_STEHEND if velocity.length() < STILLSTAND else 1.0)
+	if _seit_treffer >= schild_pause:
+		var rate := SCHILD_LADEN * schild_laden_mult * (SCHILD_STEHEND if velocity.length() < STILLSTAND else 1.0)
 		schild = minf(schild_max, schild + rate * dt)
 
 
@@ -222,11 +290,11 @@ func _ziel_nahe(winkel: float) -> Node3D:
 
 func laser_schuss() -> void:
 	var w := Waffen.finde(laser_wahl)
-	_laser_cd = w.cd
+	_laser_cd = w.cd / feuerrate
 	_seite = -_seite
 	var versatz := 0.45 * _seite if w.anzahl == 1 else 0.0
 	var start := global_transform * Vector3(versatz, -0.35, -1.0 - 1.0 * float(w.groesse))   # große Kugeln weiter vorn
-	_salve(w, start, Waffen.schaden_faktor(stufe_von(w.id)))
+	_salve(w, start, Waffen.schaden_faktor(stufe_von(w.id)) * laser_mult)
 	var klang := get_tree().root.get_node_or_null("Klang")
 	if klang:
 		klang.spiele(w.ton, null, w.db, w.tonhoehe)
@@ -237,7 +305,7 @@ func raketen_schuss() -> void:
 	_raketen_cd = w.cd
 	raketen -= int(w.kosten_munition)
 	var start := global_transform * Vector3(0, -0.5, -1.2)
-	for g in _salve(w, start, Waffen.schaden_faktor(stufe_von(w.id))):
+	for g in _salve(w, start, Waffen.schaden_faktor(stufe_von(w.id)) * raketen_mult):
 		g.lenkung = w.lenkung
 		g.flaeche = w.flaeche
 		g.splitter = w.splitter
@@ -262,7 +330,9 @@ func _salve(w: Dictionary, start: Vector3, mult: float) -> Array:
 			r = r.rotated(global_basis.x, deg_to_rad(randf_range(-w.streuung, w.streuung)))
 			r = r.rotated(global_basis.y, deg_to_rad(randf_range(-w.streuung, w.streuung)))
 		# höhere Version: etwas dickere Bolzen, damit man es sieht
-		var g := Geschoss.neu(start, r, w.tempo, w.schaden * mult, true, w.farbe, 0.0, w.groesse * (0.85 + 0.15 * mult))
+		# Zielrechner: Chance auf doppelten Schaden je Geschoss
+		var s: float = w.schaden * mult * (2.0 if krit > 0.0 and randf() < krit else 1.0)
+		var g := Geschoss.neu(start, r, w.tempo, s, true, w.farbe, 0.0, w.groesse * (0.85 + 0.15 * minf(mult, 2.2)))
 		welt.add_child(g)
 		aus.append(g)
 	return aus
@@ -281,6 +351,8 @@ func _autopilot_fliegen(dt: float) -> void:
 
 
 func aufnehmen(art: String, menge: int) -> bool:
+	if art == "erz":
+		menge = int(round(menge * erz_mult))      # Raffinerie
 	var genommen := _aufnehmen(art, menge)
 	if genommen:
 		aufgenommen.emit(art, menge)
@@ -317,6 +389,12 @@ func treffer(s: float) -> void:
 		huelle += schild      # was der Schild nicht abfängt, trifft die Hülle
 		schild = 0.0
 	getroffen.emit(s)
+	if huelle <= 0.0 and notschild > 0:
+		notschild -= 1
+		huelle = 1.0
+		schild = schild_max
+		notschild_ausgeloest.emit()
+		return
 	if huelle <= 0.0:
 		huelle = 0.0
 		aktiv = false
