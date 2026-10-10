@@ -24,7 +24,8 @@ func _ready() -> void:
 	var tasten := [KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8]
 	for i in 8:
 		_aktion("waffe_%d" % (i + 1), [tasten[i]], [], [])
-	_aktion("laser_weiter", [], [JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_LEFT], [])
+	_aktion("laser_weiter", [], [JOY_BUTTON_DPAD_RIGHT], [], [MOUSE_BUTTON_WHEEL_UP])
+	_aktion("laser_zurueck", [], [JOY_BUTTON_DPAD_LEFT], [], [MOUSE_BUTTON_WHEEL_DOWN])
 	_aktion("rakete_weiter", [], [JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_DOWN], [])
 
 

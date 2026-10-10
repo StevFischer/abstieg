@@ -228,10 +228,14 @@ func erreichbare(von: Vector3i) -> Dictionary:
 	return gesehen
 
 
-## Zeit für die Flucht nach der Reaktorzerstörung: großzügig nach Weglänge bemessen.
+## Zeit für die Flucht nach der Reaktorzerstörung.
+## Gemessen an Stevs Läufen (2026-10-10): er fliegt die Strecke mit knapp 10 m/s und brauchte
+## damals nur ein Drittel der Zeit. Jetzt: 6 s Anlauf + Weg mit 6 m/s (knapp doppelte Flugzeit
+## als Puffer für Kampf und Umwege), mit jeder Tiefe 1,5 % knapper, höchstens 30 %.
 func fluchtzeit() -> float:
-	var n := pfad(mittelzelle(reaktor_raum), mittelzelle(start_raum)).size()
-	return 25.0 + n * ZELLE / 6.0
+	var weg := maxi(pfad(mittelzelle(reaktor_raum), mittelzelle(start_raum)).size() - 1, 0) * ZELLE
+	var knapp := maxf(0.7, 1.0 - 0.015 * (tiefe - 1))
+	return (6.0 + weg / 6.0) * knapp
 
 
 func fingerabdruck() -> int:

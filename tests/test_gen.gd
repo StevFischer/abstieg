@@ -31,7 +31,7 @@ func _init() -> void:
 			if g.erreichbare(g.mittelzelle(0)).size() != g.zellen.size():
 				fehler += 1
 				print("FEHLER Mine zerfällt: Tiefe %d Saat %d" % [tiefe, saat])
-			if g.fluchtzeit() < 25.0 or g.fluchtzeit() > 400.0:
+			if g.fluchtzeit() < 8.0 or g.fluchtzeit() > 300.0:
 				fehler += 1
 				print("FEHLER Fluchtzeit %.0f: Tiefe %d Saat %d" % [g.fluchtzeit(), tiefe, saat])
 			abdruecke[g.fingerabdruck()] = true

@@ -8,6 +8,7 @@ func _init() -> void:
 	var dt := 1.0 / 60.0
 	s.schild_max = 100.0
 	s.schild = 100.0
+	s.velocity = Vector3(0, 0, -10)          # im Flug: normale Rate
 	s.treffer(60.0)                       # 40 übrig, Pause beginnt
 	for i in int(4.9 / dt):
 		s.schild_laden(dt)
@@ -24,12 +25,21 @@ func _init() -> void:
 	for i in int(120.0 / dt):
 		s.schild_laden(dt)
 	fehler += _pruef("nie über das Maximum", is_equal_approx(s.schild, 100.0), s.schild)
+	# Stehend dreimal so schnell: 10 s nach der Pause +45 statt +15
+	s.treffer(60.0)
+	var nach_treffer: float = s.schild
+	s.velocity = Vector3.ZERO
+	for i in int(15.0 / dt):
+		s.schild_laden(dt)
+	fehler += _pruef("stehend dreifach (+45 in 10 s)", absf(s.schild - nach_treffer - 45.0) < 1.0, s.schild)
+	s.schild = 0.0
+	s.huelle = 0.0
 	s.treffer(500.0)                      # tot
 	for i in int(20.0 / dt):
 		s.schild_laden(dt)
 	fehler += _pruef("nach dem Tod kein Laden", s.schild == 0.0, s.schild)
 	s.free()
-	print("Schild-Test: 5 Prüfungen, %d Fehler" % fehler)
+	print("Schild-Test: 6 Prüfungen, %d Fehler" % fehler)
 	quit(1 if fehler > 0 else 0)
 
 

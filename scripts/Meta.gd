@@ -83,7 +83,7 @@ func schiffswerte() -> Dictionary:
 		"schild_max": 50.0 + 25.0 * stufe("schild"),
 		"huelle_max": 100.0 + 25.0 * stufe("panzerung"),
 		"laser_mult": 1.0 + 0.2 * stufe("laser"),
-		"energie_regen": 3.0 * (1.0 + 0.3 * stufe("energie")),
+		"energie_regen": 1.0 * (1.0 + 0.3 * stufe("energie")),
 		"tempo": 14.0 * (1.0 + 0.08 * stufe("triebwerk")),
 		"raketen_max": 4 + 2 * stufe("raketen"),
 	}

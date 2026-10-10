@@ -14,9 +14,12 @@ const PAD_DREH := 2.6
 const ROLL := 2.2
 const AUTOPILOT_TEMPO := 12.0
 ## Schild lädt sich von selbst auf, aber erst nach einer Pause ohne Treffer — und langsam:
-## 1,5 je Sekunde heißt gut eine Minute von leer bis voll (100). Ein Treffer setzt die Pause zurück.
+## 1,5 je Sekunde im Flug, dreimal so schnell, wenn das Schiff steht (unter STILLSTAND m/s).
+## Ein Treffer setzt die Pause zurück.
 const SCHILD_PAUSE := 5.0
 const SCHILD_LADEN := 1.5
+const SCHILD_STEHEND := 3.0
+const STILLSTAND := 2.0
 
 var schild_max := 100.0
 var schild := 100.0
@@ -98,6 +101,8 @@ func _unhandled_input(e: InputEvent) -> void:
 			waehle(Waffen.RAKETEN[i].id)
 	if e.is_action_pressed("laser_weiter"):
 		_durchschalten(Waffen.LASER, laser_wahl)
+	if e.is_action_pressed("laser_zurueck"):
+		_durchschalten(Waffen.LASER, laser_wahl, -1)
 	if e.is_action_pressed("rakete_weiter"):
 		_durchschalten(Waffen.RAKETEN, rakete_wahl)
 
@@ -134,7 +139,8 @@ func schild_laden(dt: float) -> void:
 		return
 	_seit_treffer += dt
 	if _seit_treffer >= SCHILD_PAUSE:
-		schild = minf(schild_max, schild + SCHILD_LADEN * dt)
+		var rate := SCHILD_LADEN * (SCHILD_STEHEND if velocity.length() < STILLSTAND else 1.0)
+		schild = minf(schild_max, schild + rate * dt)
 
 
 ## Waffe wählen, wenn freigeschaltet. Gibt false zurück, wenn sie noch gekauft werden muss.
@@ -150,13 +156,13 @@ func waehle(id: String) -> bool:
 	return true
 
 
-func _durchschalten(liste: Array, jetzt: String) -> void:
+func _durchschalten(liste: Array, jetzt: String, richtung := 1) -> void:
 	var i := 0
 	for k in liste.size():
 		if liste[k].id == jetzt:
 			i = k
 	for schritt in range(1, liste.size()):
-		var w: Dictionary = liste[(i + schritt) % liste.size()]
+		var w: Dictionary = liste[posmod(i + schritt * richtung, liste.size())]
 		if w.id in waffen_frei:
 			waehle(w.id)
 			return
