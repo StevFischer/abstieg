@@ -3,9 +3,26 @@ extends RefCounted
 ## Explosionen: leuchtende Kugel, die aufbläht und verblasst, dazu ein kurzer Lichtblitz.
 
 
+## Ton über das Autoload Klang — per Pfad geholt, damit Skripte, die Effekte benutzen,
+## auch in Tests ohne Autoloads (godot --script) übersetzen.
+static func ton(name: String, pos: Variant = null, db := 0.0) -> void:
+	var baum := Engine.get_main_loop() as SceneTree
+	if baum == null:
+		return
+	var k := baum.root.get_node_or_null("Klang")
+	if k != null:
+		k.spiele(name, pos, db)
+
+
 static func explosion(eltern: Node, pos: Vector3, farbe: Color, groesse: float) -> void:
 	if eltern == null or not eltern.is_inside_tree():
 		return
+	if groesse <= 1.5:
+		ton("einschlag", pos, -12.0)
+	elif groesse <= 5.0:
+		ton("explosion", pos, 0.0)
+	else:
+		ton("explosion_gross", pos, 0.0)
 	var k := MeshInstance3D.new()
 	var kugel := SphereMesh.new()
 	kugel.radius = 0.5

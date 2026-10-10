@@ -351,7 +351,11 @@ func _pause(an: bool) -> void:
 # --- Selbsttest ---------------------------------------------------------------
 
 func _autotest() -> void:
-	Protokoll.schreib("test", "Autotest beginnt")
+	Protokoll.schreib("test", "Autotest beginnt, Audiotreiber %s" % AudioServer.get_driver_name())
+	# Den echten Spielton mitschneiden: Aufnahme am Master-Bus.
+	var aufnahme := AudioEffectRecord.new()
+	AudioServer.add_bus_effect(0, aufnahme)
+	aufnahme.set_recording_active(true)
 	_starte_lauf()
 	schiff.unverwundbar = true
 	for a in OS.get_cmdline_user_args():
@@ -364,6 +368,14 @@ func _autotest() -> void:
 		var t := tiefe
 		await _warte(1.5)
 		_foto("tiefe%d_1_start" % t)
+		for i in 6:                      # Spielerlaser: dieselbe Funktion wie die Feuertaste
+			schiff.laser_schuss()
+			await _warte(0.15)
+		var opfer := get_tree().get_nodes_in_group("gegner")
+		if not opfer.is_empty():
+			opfer[0].treffer(1.0e9)          # Roboterexplosion samt Ton
+			Protokoll.schreib("test", "Roboter zerstört bei %s" % opfer[0].global_position)
+			await _warte(1.0)
 		if runde == 0:
 			# Hülle sichtbar machen: 130 Schaden = Schild leer, Hülle 70
 			schiff.unverwundbar = false
@@ -413,6 +425,15 @@ func _autotest() -> void:
 	var verschieden: bool = abdruecke.size() == 3 and abdruecke[0] != abdruecke[1] and abdruecke[1] != abdruecke[2]
 	Protokoll.schreib("test", "Grundrisse verschieden: %s %s" % [verschieden, abdruecke])
 	ok = ok and verschieden
+	aufnahme.set_recording_active(false)
+	var wav := aufnahme.get_recording()
+	if wav != null:
+		var pfad := ProjectSettings.globalize_path("res://pruefung/ton.wav")
+		wav.save_to_wav(pfad)
+		Protokoll.schreib("test", "Ton mitgeschnitten: %s, %.1f s" % [pfad, wav.get_length()])
+	else:
+		Protokoll.schreib("test", "Ton: keine Aufnahme")
+	Protokoll.schreib("test", "Abgespielte Töne: %s" % get_node("/root/Klang").zaehler)
 	Protokoll.schreib("test", "AUTOTEST %s" % ("BESTANDEN" if ok else "FEHLGESCHLAGEN"))
 	get_tree().quit(0 if ok else 1)
 

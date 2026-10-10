@@ -14,6 +14,7 @@ config/icon="res://icon.svg"
 Protokoll="*res://scripts/Protokoll.gd"
 Eingabe="*res://scripts/Eingabe.gd"
 Meta="*res://scripts/Meta.gd"
+Klang="*res://scripts/Klang.gd"
 
 [display]
 

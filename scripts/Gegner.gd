@@ -177,6 +177,7 @@ func _schiessen() -> void:
 	var richtung := (ziel.global_position - start).normalized()
 	richtung = (richtung + Vector3(randf() - 0.5, randf() - 0.5, randf() - 0.5) * 0.06).normalized()
 	welt.add_child(Geschoss.neu(start, richtung, 38.0, schaden, false, _auge))
+	Effekte.ton("laser_gegner", start, -4.0)
 
 
 func treffer(s: float) -> void:

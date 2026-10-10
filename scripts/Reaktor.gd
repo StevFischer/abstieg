@@ -95,6 +95,7 @@ func _physics_process(dt: float) -> void:
 	var q := PhysicsRayQueryParameters3D.create(start, ziel.global_position, 1)
 	if not get_world_3d().direct_space_state.intersect_ray(q).is_empty():
 		return
+	Effekte.ton("laser_gegner", start, 0.0)
 	for i in 3:
 		var r := (ziel.global_position - start).normalized()
 		r = (r + Vector3(randf() - 0.5, randf() - 0.5, randf() - 0.5) * 0.12).normalized()

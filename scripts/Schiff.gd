@@ -126,17 +126,22 @@ func _waffen(dt: float) -> void:
 	if welt == null:
 		return
 	if Input.is_action_pressed("feuer") and _laser_cd <= 0.0 and energie >= 1.0:
-		_laser_cd = 0.14
-		energie -= 1.0
-		_seite = -_seite
-		var start := global_transform * Vector3(0.45 * _seite, -0.3, -1.0)
-		welt.add_child(Geschoss.neu(start, -global_basis.z, 90.0, 12.0 * laser_mult, true, Color(1.0, 0.3, 0.2)))
+		laser_schuss()
 	if Input.is_action_just_pressed("rakete") and _raketen_cd <= 0.0 and raketen > 0:
 		_raketen_cd = 0.6
 		raketen -= 1
 		var start := global_transform * Vector3(0, -0.5, -1.2)
 		welt.add_child(Geschoss.neu(start, -global_basis.z, 34.0, 70.0 * laser_mult, true,
 			Color(1.0, 0.75, 0.3), 2.5, 1.6))
+
+
+func laser_schuss() -> void:
+	_laser_cd = 0.14
+	energie -= 1.0
+	_seite = -_seite
+	var start := global_transform * Vector3(0.45 * _seite, -0.3, -1.0)
+	welt.add_child(Geschoss.neu(start, -global_basis.z, 90.0, 12.0 * laser_mult, true, Color(1.0, 0.3, 0.2)))
+	Effekte.ton("laser", null, -9.0)
 
 
 func _autopilot_fliegen(dt: float) -> void:
