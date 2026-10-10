@@ -16,9 +16,26 @@ static func ton(name: String, pos: Variant = null, db := 0.0) -> void:
 
 ## Aufsteigende Schadenszahl am Ziel: steigt 1,6 m hoch und verblasst. Größer und wärmer bei viel Schaden,
 ## blau für geblockte Treffer. Immer gleich groß auf dem Schirm und durch Wände sichtbar, damit man sie liest.
-static func schadenszahl(eltern: Node, pos: Vector3, text: String, wert := 0.0, geblockt := false) -> void:
+## Schnelle Treffer am selben Ziel (Vulkan, Streufeuer) zu einer hochzählenden Zahl zusammenfassen,
+## statt einen unlesbaren Stapel kleiner Zahlen zu erzeugen. Fenster: 0,45 s seit dem letzten Treffer.
+static var _laufend := {}
+
+static func schaden_sammeln(ziel: Node3D, eltern: Node, pos: Vector3, wert: float) -> void:
+	var id := ziel.get_instance_id()
+	var jetzt := Time.get_ticks_msec() / 1000.0
+	var summe := wert
+	if _laufend.has(id):
+		var alt: Array = _laufend[id]
+		if jetzt - float(alt[2]) < 0.45 and is_instance_valid(alt[0]):
+			summe += float(alt[1])
+			alt[0].queue_free()
+	var l := schadenszahl(eltern, pos, "%d" % maxi(int(round(summe)), 1), summe)
+	_laufend[id] = [l, summe, jetzt]
+
+
+static func schadenszahl(eltern: Node, pos: Vector3, text: String, wert := 0.0, geblockt := false) -> Label3D:
 	if eltern == null or not eltern.is_inside_tree():
-		return
+		return null
 	var l := Label3D.new()
 	l.text = text
 	l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -47,6 +64,7 @@ static func schadenszahl(eltern: Node, pos: Vector3, text: String, wert := 0.0, 
 	tw.tween_property(l, "modulate:a", 0.0, 0.45).set_delay(0.45)
 	tw.tween_property(l, "outline_modulate:a", 0.0, 0.45).set_delay(0.45)
 	tw.chain().tween_callback(l.queue_free)
+	return l
 
 
 static func explosion(eltern: Node, pos: Vector3, farbe: Color, groesse: float) -> void:
@@ -67,7 +85,9 @@ static func explosion(eltern: Node, pos: Vector3, farbe: Color, groesse: float) 
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	m.albedo_color = Color(farbe.r * 2.0, farbe.g * 2.0, farbe.b * 2.0, 1.0)
+	# Gedämpft (Stev: „Effekte zu heftig, sieht man nicht gut“): weniger grell, halb durchsichtig,
+	# kleine Einschläge fast ohne Lichtblitz — bei Dauerfeuer summieren sich die Blitze sonst.
+	m.albedo_color = Color(farbe.r * 1.3, farbe.g * 1.3, farbe.b * 1.3, 0.7)
 	kugel.material = m
 	k.mesh = kugel
 	eltern.add_child(k)
@@ -75,8 +95,8 @@ static func explosion(eltern: Node, pos: Vector3, farbe: Color, groesse: float) 
 	k.scale = Vector3.ONE * 0.2
 	var licht := OmniLight3D.new()
 	licht.light_color = farbe
-	licht.omni_range = groesse * 4.0
-	licht.light_energy = 4.0
+	licht.omni_range = groesse * (2.5 if groesse <= 1.5 else 4.0)
+	licht.light_energy = 0.6 if groesse <= 1.5 else 2.2
 	eltern.add_child(licht)
 	licht.global_position = pos
 	var tw := k.create_tween().set_parallel()

@@ -136,7 +136,7 @@ func treffer(s: float) -> void:
 		Effekte.schadenszahl(get_parent(), global_position + Vector3(0, 2.5, 0), "GESCHIRMT", 0.0, true)
 		return
 	if s < 100000.0:
-		Effekte.schadenszahl(get_parent(), global_position + Vector3(0, 2.5, 0), "%d" % maxi(int(round(s)), 1), s)
+		Effekte.schaden_sammeln(self, get_parent(), global_position + Vector3(0, 2.5, 0), s)
 	hp -= s
 	if hp <= 0.0:
 		kaputt = true

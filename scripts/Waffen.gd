@@ -19,7 +19,7 @@ const LASER := [
 		"farbe": Color(1.0, 0.9, 0.3), "groesse": 0.7, "ton": "laser", "tonhoehe": 1.45, "db": -15.0},
 	{"id": "plasma", "name": "Plasma", "preis": 180, "text": "langsame, schwere Kugeln",
 		"cd": 0.42, "schaden": 40.0, "tempo": 45.0, "anzahl": 1, "streuung": 0.0,
-		"farbe": Color(0.3, 0.8, 1.0), "groesse": 2.6, "ton": "laser_gegner", "tonhoehe": 0.6, "db": -4.0},
+		"farbe": Color(0.3, 0.8, 1.0), "groesse": 1.7, "ton": "laser_gegner", "tonhoehe": 0.6, "db": -4.0},
 ]
 
 const RAKETEN := [
@@ -34,7 +34,7 @@ const RAKETEN := [
 		"streuung": 0.0, "flaeche": 0.0, "splitter": 5, "farbe": Color(0.6, 1.0, 0.4), "groesse": 1.8},
 	{"id": "mega", "name": "Mega-Rakete", "preis": 220, "text": "riesige Explosion, Abstand halten",
 		"cd": 1.4, "kosten_munition": 3, "schaden": 150.0, "tempo": 22.0, "lenkung": 0.0, "anzahl": 1,
-		"streuung": 0.0, "flaeche": 11.0, "splitter": 0, "farbe": Color(1.0, 0.3, 0.9), "groesse": 2.6},
+		"streuung": 0.0, "flaeche": 11.0, "splitter": 0, "farbe": Color(1.0, 0.3, 0.9), "groesse": 2.0},
 ]
 
 const START := ["zwilling", "zielsuch"]

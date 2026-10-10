@@ -39,7 +39,9 @@ static func neu(pos: Vector3, richtung: Vector3, tempo: float, p_schaden: float,
 	kapsel.rings = 2
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	m.albedo_color = Color(p_farbe.r * 2.2, p_farbe.g * 2.2, p_farbe.b * 2.2)
+	# Eigene Geschosse fliegen direkt vor der Kamera — weniger grell, sonst verdecken sie die Sicht
+	var hell := 1.5 if p_vom_spieler else 2.2
+	m.albedo_color = Color(p_farbe.r * hell, p_farbe.g * hell, p_farbe.b * hell)
 	kapsel.material = m
 	mi.mesh = kapsel
 	mi.rotation.x = PI / 2.0
@@ -47,7 +49,7 @@ static func neu(pos: Vector3, richtung: Vector3, tempo: float, p_schaden: float,
 	var l := OmniLight3D.new()
 	l.light_color = p_farbe
 	l.omni_range = 4.0 * groesse
-	l.light_energy = 0.8
+	l.light_energy = 0.35 if p_vom_spieler else 0.8
 	g.add_child(l)
 	return g
 
@@ -77,7 +79,7 @@ func _physics_process(dt: float) -> void:
 				obj.treffer_von(schaden, geschw)
 			elif obj.has_method("treffer"):
 				obj.treffer(schaden)
-		var groesse := knall if knall > 0.0 else (4.0 if lenkung > 0.0 else 1.2)
+		var groesse := knall if knall > 0.0 else (4.0 if lenkung > 0.0 else 0.7)
 		Effekte.explosion(get_parent(), treffer.position, farbe, groesse)
 		if flaeche > 0.0:
 			_flaechenschaden(treffer.position)

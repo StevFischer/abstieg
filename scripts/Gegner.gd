@@ -609,7 +609,7 @@ func treffer(s: float) -> void:
 	if _tot:
 		return
 	if s < 100000.0:            # Testabschüsse (1e9) nicht als Zahl zeigen
-		Effekte.schadenszahl(get_parent(), global_position, "%d" % maxi(int(round(s)), 1), s)
+		Effekte.schaden_sammeln(self, get_parent(), global_position, s)
 	hp -= s
 	if not _alarm:
 		_alarm = true

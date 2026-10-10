@@ -181,7 +181,7 @@ func laser_schuss() -> void:
 	_laser_cd = w.cd
 	_seite = -_seite
 	var versatz := 0.45 * _seite if w.anzahl == 1 else 0.0
-	var start := global_transform * Vector3(versatz, -0.3, -1.0)
+	var start := global_transform * Vector3(versatz, -0.35, -1.0 - 1.0 * float(w.groesse))   # große Kugeln weiter vorn
 	_salve(w, start, Waffen.schaden_faktor(stufe_von(w.id)))
 	var klang := get_tree().root.get_node_or_null("Klang")
 	if klang:
@@ -198,7 +198,7 @@ func raketen_schuss() -> void:
 		g.flaeche = w.flaeche
 		g.splitter = w.splitter
 		g.lebenszeit = 6.0
-		g.knall = 12.0 if w.flaeche > 0.0 else 4.0
+		g.knall = 9.0 if w.flaeche > 0.0 else 3.5
 
 
 ## Schießt "anzahl" Geschosse im Fächer (Streuung in Grad), gibt sie zurück.

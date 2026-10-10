@@ -748,6 +748,8 @@ func _waffen_schau() -> void:
 				if not foto_gemacht and Time.get_ticks_msec() - t0 > 250:
 					_foto("waffe_%s" % w.id)
 					foto_gemacht = true
+				if foto_gemacht and Time.get_ticks_msec() - t0 > 1100 and Time.get_ticks_msec() - t0 < 1130:
+					_foto("waffe_%s_einschlag" % w.id)
 				await get_tree().physics_frame
 				schiff._laser_cd -= get_physics_process_delta_time()
 		else:
@@ -755,6 +757,8 @@ func _waffen_schau() -> void:
 			schuesse += int(w.anzahl)
 			await _warte(0.25)
 			_foto("waffe_%s" % w.id)
+			await _warte(0.65)
+			_foto("waffe_%s_einschlag" % w.id)
 			var t0 := Time.get_ticks_msec()
 			while Time.get_ticks_msec() - t0 < 3500:
 				await get_tree().physics_frame
