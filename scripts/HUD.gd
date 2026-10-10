@@ -11,8 +11,6 @@ const BLAU := Color(0.35, 0.65, 1.0)
 const ORANGE := Color(1.0, 0.58, 0.22)
 const BOGEN_R := 80.0
 const BOGEN_SPANNE := 110.0      ## Grad je Bogen
-const KURZ := {"zwilling": "Zwilling", "streu": "Streufeuer", "vulkan": "Vulkan", "plasma": "Plasma",
-	"zielsuch": "Zielsuch", "streu_r": "Streurakete", "smart": "Smart", "mega": "Mega"}
 
 var _schiff: Schiff
 var _zeit := 0.0
@@ -136,44 +134,64 @@ func _boegen(m: Vector2) -> void:
 		_zeichnung.draw_string(f, Vector2(x, m.y - 18), name, HORIZONTAL_ALIGNMENT_RIGHT if links else HORIZONTAL_ALIGNMENT_LEFT, 50, 12, Color(farbe, 0.8))
 
 
-## Waffenleiste unten mittig: oben Laser 1–4, unten Raketen 5–8; gewählte hell umrandet,
-## gesperrte (noch nicht gekauft) blass. Rechts daneben der Raketenvorrat.
+## Waffenleiste unten mittig: acht Felder mit Symbol (Laser 1–4 | Raketen 5–8), gewählte farbig umrandet,
+## gesperrte grau. Beim Wechseln steht der Name 1,8 s lang über dem Feld (statt Tooltip — im Flug steuert die
+## Maus das Schiff). Rechts der Raketenvorrat.
+var _letzte_wahl := ["", ""]
+var _name_bis := {}
+
+
 func _waffenleiste() -> void:
 	if _schiff == null or not is_instance_valid(_schiff):
 		return
 	var f := ThemeDB.fallback_font
-	var b := 132.0
-	var h := 30.0
+	var k := 54.0
 	var abst := 6.0
-	var breite := 4 * b + 3 * abst
-	var start := Vector2((_zeichnung.size.x - breite) / 2.0, _zeichnung.size.y - 2 * h - abst - 26)
+	var luecke := 22.0
+	var breite := 8 * k + 6 * abst + luecke
+	var start := Vector2((_zeichnung.size.x - breite) / 2.0, _zeichnung.size.y - k - 28)
 	for reihe in 2:
 		var liste: Array = Waffen.LASER if reihe == 0 else Waffen.RAKETEN
 		var gewaehlt: String = _schiff.laser_wahl if reihe == 0 else _schiff.rakete_wahl
+		if gewaehlt != _letzte_wahl[reihe]:
+			if _letzte_wahl[reihe] != "":
+				_name_bis[gewaehlt] = _zeit + 1.8
+			_letzte_wahl[reihe] = gewaehlt
 		for i in 4:
 			var w: Dictionary = liste[i]
-			var r := Rect2(start + Vector2(i * (b + abst), reihe * (h + abst)), Vector2(b, h))
+			var x := start.x + (reihe * 4 + i) * (k + abst) + reihe * (luecke - abst)
+			var r := Rect2(Vector2(x, start.y), Vector2(k, k))
 			var frei: bool = w.id in _schiff.waffen_frei
 			var an: bool = w.id == gewaehlt
-			var farbe: Color = w.farbe
-			_zeichnung.draw_rect(r, Color(0, 0, 0, 0.55))
+			var farbe: Color = w.farbe if frei else Color(0.5, 0.5, 0.5)
+			_zeichnung.draw_rect(r, Color(0, 0, 0, 0.6))
 			if an:
 				_zeichnung.draw_rect(r, Color(farbe, 0.22))
-				_zeichnung.draw_rect(r, Color(farbe, 0.95), false, 2.0)
+				_zeichnung.draw_rect(r, Color(farbe, 1.0), false, 2.5)
 			else:
-				_zeichnung.draw_rect(r, Color(1, 1, 1, 0.18 if frei else 0.07), false, 1.0)
+				_zeichnung.draw_rect(r, Color(1, 1, 1, 0.2 if frei else 0.08), false, 1.0)
+			WaffenSymbol.zeichnen(_zeichnung, r.grow(-9), w.id, Color(farbe, 1.0 if an else (0.6 if frei else 0.22)))
 			var taste := i + 1 + reihe * 4
+			_zeichnung.draw_string(f, r.position + Vector2(4, 13), str(taste), HORIZONTAL_ALIGNMENT_LEFT, 20, 11,
+				Color(1, 1, 1, 0.75 if frei else 0.3))
 			var mk: int = _schiff.stufe_von(w.id)
-			var text := "%d  %s%s" % [taste, KURZ.get(w.id, w.name), (" " + ["", "", "II", "III", "IV", "V"][mk]) if frei and mk > 1 else ""]
-			var tf := Color(1, 1, 1, 0.95) if an else (Color(0.85, 0.85, 0.85, 0.75) if frei else Color(0.6, 0.6, 0.6, 0.3))
-			_zeichnung.draw_string(f, r.position + Vector2(8, 20), text, HORIZONTAL_ALIGNMENT_LEFT, b - 10, 15, tf)
-			if reihe == 1 and frei and int(w.kosten_munition) > 1:
-				_zeichnung.draw_string(f, r.position + Vector2(b - 26, 20), "×%d" % w.kosten_munition, HORIZONTAL_ALIGNMENT_LEFT, 24, 12, Color(tf, tf.a * 0.7))
-	# Raketenvorrat rechts neben der Raketenreihe
-	var vorrat := start + Vector2(breite + 14, h + abst)
+			if frei and mk > 1:
+				_zeichnung.draw_string(f, r.position + Vector2(0, k - 4), ["", "", "II", "III", "IV", "V"][mk],
+					HORIZONTAL_ALIGNMENT_RIGHT, k - 4, 11, Color(farbe, 0.9))
+			# Name über dem Feld nach dem Wechsel, blendet aus
+			var bis: float = _name_bis.get(w.id, 0.0)
+			if an and bis > _zeit:
+				var a := clampf((bis - _zeit) / 0.4, 0.0, 1.0)
+				var name := "%s%s" % [w.name, (" " + Waffen.MK[mk]) if mk > 1 else ""]
+				var p := Vector2(r.get_center().x - 110, r.position.y - 10)
+				_zeichnung.draw_string_outline(f, p, name, HORIZONTAL_ALIGNMENT_CENTER, 220, 17, 5, Color(0, 0, 0, 0.85 * a))
+				_zeichnung.draw_string(f, p, name, HORIZONTAL_ALIGNMENT_CENTER, 220, 17, Color(farbe, a))
+	# Raketenvorrat
 	var knapp: bool = _schiff.raketen < int(Waffen.finde(_schiff.rakete_wahl).kosten_munition)
-	_zeichnung.draw_string_outline(f, vorrat + Vector2(0, 21), "%d/%d" % [_schiff.raketen, _schiff.raketen_max], HORIZONTAL_ALIGNMENT_LEFT, 80, 20, 5, Color(0, 0, 0, 0.85))
-	_zeichnung.draw_string(f, vorrat + Vector2(0, 21), "%d/%d" % [_schiff.raketen, _schiff.raketen_max], HORIZONTAL_ALIGNMENT_LEFT, 80, 20, ROT if knapp else Color(1.0, 0.75, 0.4))
+	var vp := Vector2(start.x + breite + 12, start.y + k * 0.62)
+	var txt := "%d/%d" % [_schiff.raketen, _schiff.raketen_max]
+	_zeichnung.draw_string_outline(f, vp, txt, HORIZONTAL_ALIGNMENT_LEFT, 80, 20, 5, Color(0, 0, 0, 0.85))
+	_zeichnung.draw_string(f, vp, txt, HORIZONTAL_ALIGNMENT_LEFT, 80, 20, ROT if knapp else Color(1.0, 0.75, 0.4))
 
 
 func _ecke(c: Control, ax: float, ay: float, von: Vector2, bis: Vector2) -> void:

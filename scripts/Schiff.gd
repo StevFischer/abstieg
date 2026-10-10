@@ -149,7 +149,6 @@ func waehle(id: String) -> bool:
 		laser_wahl = id
 	else:
 		rakete_wahl = id
-	waffe_gewechselt.emit(Waffen.finde(id).name)
 	return true
 
 

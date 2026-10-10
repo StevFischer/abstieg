@@ -11,6 +11,21 @@ const ORANGE := Color(1.0, 0.6, 0.2)
 
 func _init() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# Tooltips mit dunklem Kasten — die Vorgabe ist durchsichtig und läuft über die Karten
+	var t := Theme.new()
+	var kasten := StyleBoxFlat.new()
+	kasten.bg_color = Color(0.05, 0.045, 0.04, 0.97)
+	kasten.border_color = ORANGE
+	kasten.set_border_width_all(1)
+	kasten.set_corner_radius_all(5)
+	kasten.content_margin_left = 12
+	kasten.content_margin_right = 12
+	kasten.content_margin_top = 8
+	kasten.content_margin_bottom = 8
+	t.set_stylebox("panel", "TooltipPanel", kasten)
+	t.set_font_size("font_size", "TooltipLabel", 17)
+	t.set_color("font_color", "TooltipLabel", Color(0.95, 0.92, 0.85))
+	theme = t
 
 
 func aufbauen() -> void:
@@ -139,40 +154,93 @@ func _frage_neues_spiel() -> void:
 
 
 func _waffen_spalte(rechts: VBoxContainer) -> void:
-	rechts.add_child(_label("WAFFEN — freischalten, dann bis Mk V verbessern (+30 % Schaden je Version)", 22, ORANGE, false))
+	rechts.add_child(_label("WAFFEN — Maus drauf für Name und Werte", 22, ORANGE, false))
 	var frei := Meta.waffen_frei()
 	for liste in [Waffen.LASER, Waffen.RAKETEN]:
+		var raster := GridContainer.new()
+		raster.columns = 4
+		raster.add_theme_constant_override("h_separation", 10)
+		raster.add_theme_constant_override("v_separation", 10)
+		rechts.add_child(raster)
 		for i in liste.size():
-			var w: Dictionary = liste[i]
-			var taste: int = i + 1 if liste == Waffen.LASER else i + 5
-			var zeile := HBoxContainer.new()
-			var besitzt: bool = w.id in frei
-			var mk := Meta.waffen_stufe(w.id)
-			var text := _label("%d  %s%s  (%s)" % [taste, w.name, ("  " + Waffen.MK[mk]) if besitzt else "", w.text],
-				20, Color(0.9, 0.88, 0.8), false)
-			text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			zeile.add_child(text)
-			var b := Button.new()
-			b.custom_minimum_size = Vector2(220, 40)
-			b.add_theme_font_size_override("font_size", 19)
-			var id: String = w.id
-			if besitzt and mk >= Waffen.MAX_STUFE:
-				b.text = "Mk V · ausgebaut"
-				b.disabled = true
-			elif besitzt:
-				b.text = "%s · %d Erz" % [Waffen.MK[mk + 1], Waffen.verbessern_preis(id, mk)]
-				b.disabled = not Meta.waffe_verbesserbar(id)
-				b.pressed.connect(func():
-					if Meta.waffe_verbessern(id):
-						aufbauen())
-			else:
-				b.text = "Kaufen · %d Erz" % w.preis
-				b.disabled = not Meta.waffe_kaufbar(w.id)
-				b.pressed.connect(func():
-					if Meta.waffe_kaufen(id):
-						aufbauen())
-			zeile.add_child(b)
-			rechts.add_child(zeile)
+			raster.add_child(_waffenkarte(liste[i], i + 1 if liste == Waffen.LASER else i + 5, frei))
+
+
+## Eine Karte je Waffe: Taste, Symbol, Version, Kaufknopf. Name und Werte stehen im Tooltip.
+func _waffenkarte(w: Dictionary, taste: int, frei: Array) -> Control:
+	var besitzt: bool = w.id in frei
+	var mk := Meta.waffen_stufe(w.id)
+	var farbe: Color = w.farbe if besitzt else Color(0.55, 0.55, 0.55)
+	var karte := PanelContainer.new()
+	karte.custom_minimum_size = Vector2(170, 0)
+	karte.mouse_filter = Control.MOUSE_FILTER_STOP
+	var stil := StyleBoxFlat.new()
+	stil.bg_color = Color(farbe.r * 0.12, farbe.g * 0.12, farbe.b * 0.12, 0.95)
+	stil.border_color = Color(farbe, 0.85 if besitzt else 0.35)
+	stil.set_border_width_all(2)
+	stil.set_corner_radius_all(8)
+	stil.content_margin_left = 8
+	stil.content_margin_right = 8
+	stil.content_margin_top = 6
+	stil.content_margin_bottom = 8
+	karte.add_theme_stylebox_override("panel", stil)
+	var spalte := VBoxContainer.new()
+	spalte.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	spalte.add_theme_constant_override("separation", 4)
+	karte.add_child(spalte)
+	var kopf := HBoxContainer.new()
+	kopf.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var t := _label("%d" % taste, 16, Color(0.75, 0.75, 0.7), false)
+	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	t.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	kopf.add_child(t)
+	var v := _label(Waffen.MK[mk] if besitzt else "gesperrt", 16, farbe, false)
+	v.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	kopf.add_child(v)
+	spalte.add_child(kopf)
+	var sym := WaffenSymbol.new(w.id, Color(farbe, 1.0 if besitzt else 0.6))
+	sym.custom_minimum_size = Vector2(0, 74)
+	spalte.add_child(sym)
+	var b := Button.new()
+	b.custom_minimum_size = Vector2(0, 36)
+	b.add_theme_font_size_override("font_size", 16)
+	var id: String = w.id
+	if besitzt and mk >= Waffen.MAX_STUFE:
+		b.text = "Mk V · max"
+		b.disabled = true
+	elif besitzt:
+		b.text = "%s · %d" % [Waffen.MK[mk + 1], Waffen.verbessern_preis(id, mk)]
+		b.disabled = not Meta.waffe_verbesserbar(id)
+		b.pressed.connect(func():
+			if Meta.waffe_verbessern(id):
+				aufbauen())
+	else:
+		b.text = "Kaufen · %d" % w.preis
+		b.disabled = not Meta.waffe_kaufbar(id)
+		b.pressed.connect(func():
+			if Meta.waffe_kaufen(id):
+				aufbauen())
+	spalte.add_child(b)
+	var tip := _tooltip(w, besitzt, mk)
+	karte.tooltip_text = tip
+	b.tooltip_text = tip
+	return karte
+
+
+func _tooltip(w: Dictionary, besitzt: bool, mk: int) -> String:
+	var faktor := Waffen.schaden_faktor(mk)
+	var zeilen: Array[String] = ["%s%s" % [w.name, ("  " + Waffen.MK[mk]) if besitzt else ""], w.text]
+	if Waffen.ist_laser(w.id):
+		zeilen.append("Schaden %.0f je Schuss%s · %.1f Schuss/s" % [
+			w.schaden * faktor, (" × %d" % w.anzahl) if w.anzahl > 1 else "", 1.0 / w.cd])
+	else:
+		zeilen.append("Schaden %.0f%s · %d Munition je Schuss" % [
+			w.schaden * faktor, (" × %d" % w.anzahl) if w.anzahl > 1 else "", w.kosten_munition])
+	if besitzt and mk < Waffen.MAX_STUFE:
+		zeilen.append("Nächste Version %s: Schaden %.0f" % [Waffen.MK[mk + 1], w.schaden * Waffen.schaden_faktor(mk + 1)])
+	elif not besitzt:
+		zeilen.append("Noch nicht freigeschaltet")
+	return "\n".join(zeilen)
 
 
 func _label(text: String, groesse: int, farbe: Color, zentriert: bool) -> Label:

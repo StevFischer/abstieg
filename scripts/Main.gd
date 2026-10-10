@@ -552,6 +552,20 @@ func _autotest() -> void:
 		hangar_ebene.visible = true
 		await _warte(0.8)
 		_foto("hangar_versionen")
+		# Tooltip: Maus über die Karte des Plasmawerfers fahren lassen
+		for k in hangar.find_children("*", "PanelContainer", true, false):
+			if k.tooltip_text.begins_with("Plasma"):
+				var bew := InputEventMouseMotion.new()
+				bew.position = k.get_global_rect().get_center()
+				bew.global_position = bew.position
+				get_viewport().push_input(bew)
+				await _warte(0.1)
+				bew = bew.duplicate()
+				bew.position += Vector2(2, 1)
+				bew.global_position = bew.position
+				get_viewport().push_input(bew)
+		await _warte(1.5)
+		_foto("hangar_tooltip")
 		Meta.laden()
 		get_tree().quit(0)
 		return
