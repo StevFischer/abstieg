@@ -804,11 +804,32 @@ func _schild_messung() -> void:
 					offen += 1
 		Protokoll.schreib("test", "Schildträger (Drehung %.1f, Kegel %.2f): beim Umkreisen mit %2.0f m/s in %d m Abstand ungeschützt %3.0f %% der Zeit" % [
 			Gegner.schild_drehung, Gegner.schild_kegel, v, int(r), 100.0 * offen / maxi(bilder, 1)])
+	# Schüsse aus festen Winkeln neben seiner Frontrichtung: geblockt oder Treffer?
+	st.set_physics_process(false)
+	var vorn := -st.global_basis.z
+	var ergebnis := ""
+	for winkel in [0, 20, 30, 40, 50, 60, 90, 180]:
+		var von := vorn.rotated(Vector3.UP, deg_to_rad(winkel))       # Schütze steht in dieser Richtung
+		var h := st.hp
+		st.treffer_von(10.0, -von)                                   # Geschoss fliegt auf ihn zu
+		ergebnis += "  %d°:%s" % [winkel, "Block" if st.hp == h else "Treffer"]
+	Protokoll.schreib("test", "Schildträger (Kegel %.2f) Schüsse aus Winkel:%s" % [Gegner.schild_kegel, ergebnis])
+	st.set_physics_process(true)
 	# Stillstand vor ihm: muss geschützt bleiben
 	schiff.global_position = st.global_position + Vector3(0, 0.3, 6)
 	await _warte(2.0)
-	var vorn := (-st.global_basis.z).dot((schiff.global_position - st.global_position).normalized()) > Gegner.schild_kegel
-	Protokoll.schreib("test", "Schildträger: von vorn stehend geschützt %s" % vorn)
+	var vorn_ok := (-st.global_basis.z).dot((schiff.global_position - st.global_position).normalized()) > Gegner.schild_kegel
+	Protokoll.schreib("test", "Schildträger: von vorn stehend geschützt %s" % vorn_ok)
+	# Schadenszahlen im Bild: Schildträger von vorn und von der Seite beschießen
+	schiff.global_position = st.global_position + Vector3(0, 1.5, 7)
+	schiff.look_at(st.global_position, Vector3.UP)
+	st.set_physics_process(false)
+	st.hp = 10000.0
+	st.hp_max = 10000.0
+	for i in 6:
+		st.treffer_von(12.0 + i * 9.0, -(-st.global_basis.z).rotated(Vector3.UP, deg_to_rad(80 if i % 2 == 0 else 0)))
+		await _warte(0.12)
+	_foto("schadenszahlen")
 
 
 ## Portal, Minen gegen Beute, Halle mit Säulen und Lampen, Lampen an echter Decke, Neues-Spiel-Abfrage.

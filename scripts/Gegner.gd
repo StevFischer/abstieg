@@ -55,7 +55,7 @@ const RUF_WEITE := 30.0
 ## (Kosinus des halben Öffnungswinkels; 0,5 = ±60°). Gemessen 2026-10-10: mit 3,5 / 0,35 war er beim
 ## Umkreisen selbst mit 14 m/s 0 % der Zeit ungeschützt — praktisch unverwundbar.
 static var schild_drehung := 1.2
-static var schild_kegel := 0.5
+static var schild_kegel := 0.82     ## ±35° (Stev: „seitlich auch treffbar“; vorher ±60°)
 
 static var _modelle := {}
 static var _platten: ImageTexture
@@ -599,6 +599,7 @@ func _detonieren(radius: float) -> void:
 func treffer_von(s: float, richtung: Vector3) -> bool:
 	if typ == "schildtraeger" and not _tot and (-global_basis.z).dot(-richtung.normalized()) > schild_kegel:
 		Effekte.explosion(get_parent(), global_position - global_basis.z * 1.2, Color(0.4, 0.7, 1.0), 1.0)
+		Effekte.schadenszahl(get_parent(), global_position - global_basis.z * 1.2, "BLOCK", 0.0, true)
 		return false
 	treffer(s)
 	return true
@@ -607,6 +608,8 @@ func treffer_von(s: float, richtung: Vector3) -> bool:
 func treffer(s: float) -> void:
 	if _tot:
 		return
+	if s < 100000.0:            # Testabschüsse (1e9) nicht als Zahl zeigen
+		Effekte.schadenszahl(get_parent(), global_position, "%d" % maxi(int(round(s)), 1), s)
 	hp -= s
 	if not _alarm:
 		_alarm = true

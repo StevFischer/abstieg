@@ -133,7 +133,10 @@ func treffer(s: float) -> void:
 		return
 	if geschirmt:
 		Effekte.explosion(get_parent(), global_position + Vector3(0, 0, 0), Color(0.4, 0.7, 1.0), 1.0)
+		Effekte.schadenszahl(get_parent(), global_position + Vector3(0, 2.5, 0), "GESCHIRMT", 0.0, true)
 		return
+	if s < 100000.0:
+		Effekte.schadenszahl(get_parent(), global_position + Vector3(0, 2.5, 0), "%d" % maxi(int(round(s)), 1), s)
 	hp -= s
 	if hp <= 0.0:
 		kaputt = true
