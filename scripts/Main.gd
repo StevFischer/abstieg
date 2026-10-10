@@ -940,6 +940,40 @@ func _controller_test() -> void:
 		schuesse, laser_vor, laser_nach, rak_vor, schiff.raketen])
 	_foto("controller_flug")
 	ok = ok and schuesse >= 3 and laser_nach != laser_vor and schiff.raketen < rak_vor
+	# 3b) Zielhilfe: Drehrate halber/voller Stick, Treffer auf einen Gegner 3,5° neben dem Fadenkreuz
+	var raten := []
+	for st in [0.3, 1.0]:
+		var bz := schiff.global_basis
+		_achse(JOY_AXIS_RIGHT_X, st)
+		await _warte(0.5)
+		_achse(JOY_AXIS_RIGHT_X, 0.0)
+		raten.append(rad_to_deg(bz.z.angle_to(schiff.global_basis.z)) / 0.5)
+	await _warte(0.3)
+	# Messplatz in der Mitte des Startraums (18 m breit): Schiff 6 m links der Mitte, Blick nach +x
+	var raum_mitte := gen.mitte(gen.start_raum)
+	schiff.global_position = raum_mitte + Vector3(-6, 0, 0)
+	schiff.look_at(raum_mitte + Vector3(10, 0, 0), Vector3.UP)
+	schiff.velocity = Vector3.ZERO
+	var ziel_p := schiff.global_position + (-schiff.global_basis.z).rotated(schiff.global_basis.y, deg_to_rad(4.0)) * 10.0
+	var tg := _testgegner("drohne", ziel_p, false)
+	tg.hp = 100000.0
+	var sicht := get_world_3d().direct_space_state.intersect_ray(PhysicsRayQueryParameters3D.create(schiff.global_position, ziel_p, 1)).is_empty()
+	var treffer := {}
+	var laser_merken := schiff.laser_wahl
+	schiff.waehle("zwilling")          # Einzelbolzen — beim Streufeuer trifft der Fächer auch ohne Hilfe
+	for hilfe in [false, true]:
+		schiff.pad_aktiv = hilfe
+		var h0 := tg.hp
+		for i in 8:
+			schiff.laser_schuss()
+			await _warte(0.18)
+		await _warte(0.5)
+		treffer[hilfe] = h0 - tg.hp
+	tg.free()
+	schiff.waehle(laser_merken)
+	erg.append("Zielhilfe: Drehung %.0f°/s bei 30 %% Stick, %.0f°/s bei vollem Stick; Drohne 4° neben dem Fadenkreuz in 10 m (freie Sicht %s): Schaden ohne Hilfe %.0f, mit Hilfe %.0f" % [
+		raten[0], raten[1], sicht, treffer[false], treffer[true]])
+	ok = ok and treffer[true] > treffer[false]
 	# 4) Pause (Start), Optionen per Steuerkreuz + A, zurück mit B, weiter mit Start
 	await _knopf_druck(JOY_BUTTON_START)
 	var pausiert := get_tree().paused

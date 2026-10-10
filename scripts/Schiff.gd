@@ -10,7 +10,11 @@ signal voll(art: String)                       ## berührt, aber nicht gebraucht
 signal waffe_gewechselt(name: String)
 
 const MAUS := 0.0022
-const PAD_DREH := 2.6
+const PAD_DREH := 2.0          ## Höchstdrehung mit dem Stick (rad/s); vorher 2,6 — Stev: Zielen mit Controller zu schwer
+const PAD_KURVE := 1.5         ## Stick-Kennlinie: kleine Ausschläge drehen fein, voller Ausschlag voll
+const KLEBEN_WINKEL := 6.0     ## Gegner so nah am Fadenkreuz (Grad): Drehung bremst …
+const KLEBEN_FAKTOR := 0.45    ## … auf diesen Anteil
+const MAGNET_WINKEL := 5.0     ## Laser lenken auf einen Gegner, der so nah am Fadenkreuz liegt
 const ROLL := 2.2
 const AUTOPILOT_TEMPO := 12.0
 ## Schild lädt sich von selbst auf, aber erst nach einer Pause ohne Treffer — und langsam:
@@ -46,6 +50,7 @@ var _laser_cd := 0.0
 var _raketen_cd := 0.0
 var _seite := 1.0
 var _seit_treffer := 0.0
+var pad_aktiv := false          ## zuletzt mit dem Gamepad gesteuert → Zielhilfe an; Maus schaltet sie aus
 
 
 func _init() -> void:
@@ -84,6 +89,10 @@ func werte_setzen(w: Dictionary) -> void:
 func _unhandled_input(e: InputEvent) -> void:
 	if e is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		_maus += e.relative
+		if e.relative.length() > 2.0:
+			pad_aktiv = false
+	if e is InputEventJoypadMotion and absf(e.axis_value) > 0.3 or e is InputEventJoypadButton:
+		pad_aktiv = true
 	if e.is_action_pressed("licht"):
 		scheinwerfer.visible = not scheinwerfer.visible
 	if not aktiv:
@@ -109,6 +118,10 @@ func _physics_process(dt: float) -> void:
 		_autopilot_fliegen(dt)
 		return
 	var pad := Input.get_vector("blick_links", "blick_rechts", "blick_hoch", "blick_runter")
+	if pad.length() > 0.0:
+		pad = pad.normalized() * pow(pad.length(), PAD_KURVE)
+		if _ziel_nahe(KLEBEN_WINKEL) != null:
+			pad *= KLEBEN_FAKTOR
 	var gier := -_maus.x * MAUS - pad.x * PAD_DREH * dt
 	var nick := -_maus.y * MAUS - pad.y * PAD_DREH * dt
 	_maus = Vector2.ZERO
@@ -176,6 +189,23 @@ func _waffen(dt: float) -> void:
 		raketen_schuss()
 
 
+## Nächster Gegner (oder Reaktor) innerhalb von winkel Grad um die Blickrichtung, bis 70 m; sonst null.
+func _ziel_nahe(winkel: float) -> Node3D:
+	var vor := -global_basis.z
+	var grenze := cos(deg_to_rad(winkel))
+	var bestes: Node3D = null
+	var best_d := 70.0
+	for z in get_tree().get_nodes_in_group("ziele"):
+		var weg: Vector3 = z.global_position - global_position
+		var d := weg.length()
+		if d < best_d and d > 1.0 and vor.dot(weg / d) > grenze:
+			if z is Gegner and z.ist_getarnt():
+				continue
+			best_d = d
+			bestes = z
+	return bestes
+
+
 func laser_schuss() -> void:
 	var w := Waffen.finde(laser_wahl)
 	_laser_cd = w.cd
@@ -202,12 +232,18 @@ func raketen_schuss() -> void:
 
 
 ## Schießt "anzahl" Geschosse im Fächer (Streuung in Grad), gibt sie zurück.
+## Mit dem Gamepad zielen Laser auf einen Gegner nahe am Fadenkreuz (Treffhilfe).
 func _salve(w: Dictionary, start: Vector3, mult: float) -> Array:
 	var aus := []
 	var n: int = w.anzahl
+	var mitte := -global_basis.z
+	if pad_aktiv and Waffen.ist_laser(w.id):
+		var z := _ziel_nahe(MAGNET_WINKEL)
+		if z != null:
+			mitte = (z.global_position - start).normalized()
 	for i in n:
 		var winkel := 0.0 if n == 1 else lerpf(-w.streuung, w.streuung, float(i) / (n - 1))
-		var r := (-global_basis.z).rotated(global_basis.y, deg_to_rad(winkel))
+		var r := mitte.rotated(global_basis.y, deg_to_rad(winkel))
 		if n == 1 and w.streuung > 0.0:      # Vulkan: leichtes Flattern
 			r = r.rotated(global_basis.x, deg_to_rad(randf_range(-w.streuung, w.streuung)))
 			r = r.rotated(global_basis.y, deg_to_rad(randf_range(-w.streuung, w.streuung)))

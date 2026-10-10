@@ -34,7 +34,8 @@ func _ready() -> void:
 
 func _aktion(name: String, tasten: Array, knoepfe: Array, achsen: Array, maus: Array = []) -> void:
 	if not InputMap.has_action(name):
-		InputMap.add_action(name, 0.2)
+		# Blick-Stick mit kleiner Totzone, damit feines Zielen möglich ist (die Kennlinie in Schiff.gd dämpft)
+		InputMap.add_action(name, 0.12 if name.begins_with("blick_") else 0.2)
 	for k in tasten:
 		var e := InputEventKey.new()
 		e.physical_keycode = k

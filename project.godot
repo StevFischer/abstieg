@@ -27,4 +27,6 @@ window/handheld/orientation=0
 
 anti_aliasing/quality/msaa_3d=2
 renderer/rendering_method.mobile="mobile"
+anti_aliasing/quality/msaa_3d.mobile=0
+scaling_3d/scale.mobile=0.75
 textures/vram_compression/import_etc2_astc=true
