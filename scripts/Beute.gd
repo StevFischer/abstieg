@@ -18,6 +18,7 @@ var art := "erz"
 var modul := {}     ## nur bei art "modul": das Modul selbst (Module.gd)
 var menge := 5
 var _t := 0.0
+var _nachpruefen := 0.25
 var _form: Node3D
 var _mat: StandardMaterial3D
 var _glanz: StandardMaterial3D
@@ -172,6 +173,15 @@ func _process(dt: float) -> void:
 	_t += dt
 	_form.rotation.y = _t * 1.6
 	_form.position.y = sin(_t * 2.5) * 0.15
+	# Stev 2026-10-10: Raketen-Fundstück klebte im Schiff. body_entered kommt nur beim Hineinfliegen — war der
+	# Vorrat da voll, blieb es liegen, der Magnet zog es ins Schiff, und später hat es niemand mehr geprüft.
+	_nachpruefen -= dt
+	if _nachpruefen <= 0.0:
+		_nachpruefen = 0.25
+		for k in get_overlapping_bodies():
+			if is_queued_for_deletion():
+				break
+			_rein(k)
 
 
 func _rein(k: Node3D) -> void:

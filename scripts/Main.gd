@@ -998,7 +998,18 @@ func _autotest() -> void:
 		level.add_child(b)
 		await _warte(0.4)
 		var schild_text: String = (b.get_children().filter(func(c): return c is Label3D)[0] as Label3D).text
-		var ok: bool = not "FEHLER" in erg and not voll_genommen and schild_text == "RAKETEN · AUFFÜLLEN" and rep_text == "HÜLLE · VOLL REPARIEREN"
+		# Fundstück im Schiff bei vollem Vorrat, danach leer geschossen: muss jetzt eingesammelt werden
+		schiff.raketen = schiff.raketen_max
+		var kleber := Beute.neu("rakete", schiff.global_position)
+		level.add_child(kleber)
+		await _warte(0.6)
+		var liegt_bei_voll := is_instance_valid(kleber)
+		schiff.raketen = 0
+		await _warte(0.6)
+		var spaeter_genommen := not is_instance_valid(kleber) and schiff.raketen == schiff.raketen_max
+		erg.append("Fundstück im Schiff: bei vollem Vorrat liegen geblieben %s, nach Leerschießen eingesammelt %s" % [liegt_bei_voll, spaeter_genommen])
+		var ok: bool = not "FEHLER" in erg and not voll_genommen and schild_text == "RAKETEN · AUFFÜLLEN" and rep_text == "HÜLLE · VOLL REPARIEREN" \
+			and liegt_bei_voll and spaeter_genommen
 		Protokoll.schreib("test", "Raketen-/Reparaturfund: %s; bei vollem Vorrat genommen %s; Schilder im Bergwerk „%s“, „%s“ → %s" % [
 			"; ".join(erg), voll_genommen, schild_text, rep_text, "BESTANDEN" if ok else "FEHLGESCHLAGEN"])
 		get_tree().quit(0)
