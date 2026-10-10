@@ -312,10 +312,12 @@ func _reaktor_weg() -> void:
 	_alarm_zeit = 0.0
 	_piep_t = 2.0                       # erst die Sirene, dann das Piepen
 	var klang := get_node("/root/Klang")
-	klang.spiele("sirene", null, -2.0)
+	# Pegel gemessen (2026-10-10): Sirene war mit −2 dB rund 10 dB lauter als eine Explosion (Stev: „zu laut“).
+	# Jetzt: Sirene knapp unter Explosionen (−16 dB), Piepen auf Höhe des eigenen Lasers (−19 dB).
+	klang.spiele("sirene", null, -13.0)
 	get_tree().create_timer(1.7).timeout.connect(func():
 		if countdown >= 0.0:
-			klang.spiele("sirene", null, -2.0))
+			klang.spiele("sirene", null, -13.0))
 	level_erz += 10 + 5 * tiefe
 	ausgang.oeffnen()
 	hud.mitteilung("REAKTOR ZERSTÖRT", 2.0, HUD.ROT)
@@ -417,7 +419,7 @@ func _alarm(dt: float) -> void:
 	if _piep_t <= 0.0 and countdown > 0.0:
 		var schnell := countdown <= 10.0
 		_piep_t = 0.5 if schnell else 1.0
-		get_node("/root/Klang").spiele("piep", null, -6.0, 1.35 if schnell else 1.0)
+		get_node("/root/Klang").spiele("piep", null, -17.0, 1.35 if schnell else 1.0)
 
 
 func _leitstrahl(dt: float) -> void:
@@ -543,6 +545,12 @@ func _autotest() -> void:
 	schiff.collision_mask = 1
 	if "--zeige-waffen" in OS.get_cmdline_user_args():
 		await _waffen_schau()
+		get_tree().quit(0)
+		return
+	if "--toene-export" in OS.get_cmdline_user_args():
+		var ordner := ProjectSettings.globalize_path("res://pruefung")
+		for n in get_node("/root/Klang").toene:
+			get_node("/root/Klang").toene[n].save_to_wav("%s/ton_%s.wav" % [ordner, n])
 		get_tree().quit(0)
 		return
 	if "--zeige-hangar" in OS.get_cmdline_user_args():
