@@ -73,6 +73,19 @@ var erz := 4
 var beute := 0                  ## vom Dieb gestohlenes Erz, fällt beim Abschuss wieder heraus
 var ist_boss := false
 var boss_raum: Array = []       ## Phantom: Punkte im Bossraum zum Hinspringen
+## Bossjagd (Stev 2026-10-10: „Boss kommt nicht aus dem Bossraum, man kann sich draußen verstecken“):
+## Sieht der Boss das Schiff JAGD_NACH Sekunden nicht, folgt er ihm über den Wegfinder durch die Stollen.
+## Seine Kollisionskugel schrumpft dabei auf JAGD_RADIUS, damit er durch 6-m-Stollen passt.
+const JAGD_NACH := 2.0
+const JAGD_TEMPO := 8.0
+const JAGD_RADIUS := 2.4
+var gen: LevelGen               ## nur für Bosse gesetzt: Zellen und Wegfinder
+var jagt := false
+var _ohne_sicht := 0.0
+var _jagd_weg: Array[Vector3] = []
+var _jagd_t := 0.0
+var _kugel: SphereShape3D
+var _radius_voll := 1.0
 var phase := 1
 ## Geschosstempo: wie im Original anfangs gemächlich (11–16 m/s, das Schiff fliegt 14),
 ## +8 % je Tiefe, höchstens doppelt so schnell wie am Anfang.
@@ -126,6 +139,8 @@ func einrichten(p_typ: String, stufe: int) -> void:
 	var form := CollisionShape3D.new()
 	var kugel := SphereShape3D.new()
 	kugel.radius = d.radius
+	_kugel = kugel
+	_radius_voll = d.radius
 	form.shape = kugel
 	add_child(form)
 	_modell_laden(d)
@@ -252,6 +267,14 @@ func _physics_process(dt: float) -> void:
 			_rufen()
 		_letzte = ziel.global_position
 	var soll_v := Vector3(0, sin(_zeit * 1.7) * 0.4, 0)
+	if ist_boss and gen != null and _alarm:
+		_ohne_sicht = 0.0 if _sicht else _ohne_sicht + dt
+		if _ohne_sicht > JAGD_NACH:
+			soll_v = _jagen(dt)
+			velocity = velocity.lerp(soll_v, 1.0 - exp(-3.0 * dt))
+			move_and_slide()
+			return
+		_jagd_ende()
 	if _alarm:
 		match typ:
 			"minenleger": soll_v = _verhalten_minenleger(zum, dist, dt)
@@ -267,6 +290,47 @@ func _physics_process(dt: float) -> void:
 			_ausweichen()
 	velocity = velocity.lerp(soll_v, 1.0 - exp(-3.0 * dt))
 	move_and_slide()
+
+
+# --- Bossjagd -------------------------------------------------------------------
+
+func _jagen(dt: float) -> Vector3:
+	if not jagt:
+		jagt = true
+		_kugel.radius = minf(_radius_voll, JAGD_RADIUS)
+		_jagd_t = 0.0
+		Protokoll.schreib("gegner", "Boss %s jagt das Schiff (Sicht seit %.1f s weg)" % [typ, _ohne_sicht])
+	_jagd_t -= dt
+	if _jagd_t <= 0.0:
+		_jagd_t = 0.5
+		_jagd_weg.clear()
+		for z in gen.pfad(gen.naechste_zelle(global_position), gen.naechste_zelle(ziel.global_position)):
+			_jagd_weg.append(LevelGen.welt_von(z))
+	while not _jagd_weg.is_empty() and _jagd_weg[0].distance_to(global_position) < 2.5:
+		_jagd_weg.remove_at(0)
+	var hin: Vector3 = ziel.global_position if _jagd_weg.is_empty() else _jagd_weg[0]
+	_drehen_zu(hin, dt * 2.0)
+	if tempo <= 0.0:
+		# Phantom: springt den Weg entlang, drei Zellen auf einmal
+		_spezial_t -= dt
+		# nicht direkt vors Schiff: mindestens zwei Zellen Weg bleiben stehen
+		if _spezial_t <= 0.0 and _jagd_weg.size() > 2:
+			_spezial_t = 1.5
+			_springen(_jagd_weg[mini(2, _jagd_weg.size() - 3)])
+			_jagd_t = 0.0
+		return Vector3.ZERO
+	return (hin - global_position).normalized() * JAGD_TEMPO
+
+
+## Wieder in Sicht: Jagd vorbei. Volle Größe erst zurück im Bossraum, im Stollen passte er sonst nicht.
+func _jagd_ende() -> void:
+	if not jagt:
+		return
+	if gen.zellen.get(gen.naechste_zelle(global_position), -2) != gen.reaktor_raum:
+		return
+	jagt = false
+	_kugel.radius = _radius_voll
+	Protokoll.schreib("gegner", "Boss %s zurück im Bossraum" % typ)
 
 
 # --- Gemeinsame Bausteine ----------------------------------------------------

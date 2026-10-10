@@ -268,6 +268,7 @@ func _boss_setzen() -> void:
 	var vor := (gen.mitte(gen.start_raum) - reaktor.position)
 	vor.y = 0
 	boss = _gegner(typ, reaktor.position + vor.normalized() * 9.0)
+	boss.gen = gen
 	for z in gen.zellen_von_raum(gen.reaktor_raum):
 		var p := LevelGen.welt_von(z)
 		if p.distance_to(reaktor.position) > 6.0:
@@ -680,6 +681,10 @@ func _autotest() -> void:
 		return
 	if "--zeige-gegner" in OS.get_cmdline_user_args():
 		await _gegner_schau()
+		get_tree().quit(0)
+		return
+	if "--boss-jagd-test" in OS.get_cmdline_user_args():
+		await _boss_jagd_test()
 		get_tree().quit(0)
 		return
 	if "--aufwertungs-test" in OS.get_cmdline_user_args():
@@ -1641,6 +1646,59 @@ func _aufwertungs_test() -> void:
 		Protokoll.schreib("test", "Aufwertung: " + e)
 	Protokoll.schreib("test", "AUFWERTUNGS-TEST %s" % ("BESTANDEN" if ok else "FEHLGESCHLAGEN"))
 	Meta.zuruecksetzen()     # Teststände nicht in den nächsten Test mitnehmen (gemeinsamer Autotest-Spielstand)
+
+
+## Bossjagd: Schiff im Bossraum zeigen, dann außer Sicht in einen Stollen setzen. Der Boss muss folgen.
+func _boss_jagd_test() -> void:
+	var ok := true
+	for t in [5, 10, 15]:
+		tiefe = t
+		_lade_level()
+		await _warte(1.0)
+		for g in get_tree().get_nodes_in_group("gegner"):
+			if g != boss:
+				g.free()
+		schiff.unverwundbar = true
+		var b := boss
+		b.alarmieren(schiff.global_position)
+		# Versteck: Zelle auf dem Weg zum Start, mindestens 5 Zellen außerhalb des Bossraums, ohne Sichtlinie
+		var weg := gen.pfad(gen.naechste_zelle(reaktor.global_position), gen.naechste_zelle(gen.mitte(gen.start_raum)))
+		var draussen := 0
+		var versteck := Vector3.ZERO
+		for z in weg:
+			if gen.zellen.get(z, -2) != gen.reaktor_raum:
+				draussen += 1
+				if draussen >= 5 and not b._frei(LevelGen.welt_von(z)):
+					versteck = LevelGen.welt_von(z)
+					break
+		if versteck == Vector3.ZERO:
+			Protokoll.schreib("test", "Bossjagd Tiefe %d: kein Versteck ohne Sichtlinie gefunden" % t)
+			continue
+		schiff.global_position = versteck
+		schiff.velocity = Vector3.ZERO
+		var wege := func() -> int:
+			return gen.pfad(gen.naechste_zelle(b.global_position), gen.naechste_zelle(schiff.global_position)).size() - 1
+		var w0: int = wege.call()
+		var t0 := Time.get_ticks_msec()
+		var gesehen := -1.0
+		var gejagt := false
+		while Time.get_ticks_msec() - t0 < 30000:
+			await get_tree().physics_frame
+			schiff.velocity = Vector3.ZERO
+			gejagt = gejagt or b.jagt
+			if b._sicht and b.global_position.distance_to(schiff.global_position) < 40.0 and Time.get_ticks_msec() - t0 > 500:
+				gesehen = (Time.get_ticks_msec() - t0) / 1000.0
+				break
+		var w1: int = wege.call()
+		var gut := gejagt and gesehen > 0.0
+		if gesehen > 0.0:
+			schiff.look_at(b.global_position, Vector3.UP)
+			await _warte(0.3)
+			_foto("boss_jagd_%d" % t)
+		Protokoll.schreib("test", "Bossjagd Tiefe %d (%s): Schiff %d Zellen weg, jagt %s, nach %.1f s in Sicht, Restweg %d Zellen → %s" % [
+			t, b.typ, w0, gejagt, gesehen, w1, "ok" if gut else "FEHLER"])
+		ok = ok and gut
+	Protokoll.schreib("test", "BOSSJAGD-TEST %s" % ("BESTANDEN" if ok else "FEHLGESCHLAGEN"))
 
 
 ## Starttiefe: welche Knöpfe es gibt, Wahl per Controller, Lauf beginnt in der gewählten Tiefe.
