@@ -963,6 +963,10 @@ func _autotest() -> void:
 		await _gegner_schau()
 		get_tree().quit(0)
 		return
+	if "--tasten-test" in OS.get_cmdline_user_args():
+		await _tasten_test()
+		get_tree().quit(0)
+		return
 	if "--gegner-neu-test" in OS.get_cmdline_user_args():
 		await _gegner_neu_test()
 		get_tree().quit(0)
@@ -1700,6 +1704,76 @@ func _sicht_test() -> void:
 	erg.append("Sichtweite %.0f m (vorher 55)" % Gegner.SICHT_WEITE)
 	ok = ok and Gegner.SICHT_WEITE > 55.0
 	Protokoll.schreib("test", "Sicht: %s → %s" % ["; ".join(erg), "BESTANDEN" if ok else "FEHLGESCHLAGEN"])
+
+
+## Tastenbelegung: Anzeige, Umbelegen über die Optionen (echter Tastendruck), Tausch, Speichern/Laden, Standard.
+func _tasten_test() -> void:
+	var erg: Array[String] = []
+	var ok := true
+	var pruef := func(name: String, gut: bool, text: String):
+		erg.append("%s %s: %s" % ["ok  " if gut else "FEHL", name, text])
+		return gut
+	Eingabe.zuruecksetzen()
+	ok = pruef.call("Anzeige", Eingabe.text_fuer("notfallschild") == "R" and Eingabe.text_fuer("runter") == "Strg / C" and Eingabe.text_fuer("feuer") == "Linke Maustaste",
+		"Notfallschild „%s“, Runter „%s“, Laser „%s“" % [Eingabe.text_fuer("notfallschild"), Eingabe.text_fuer("runter"), Eingabe.text_fuer("feuer")]) and ok
+	# Optionen öffnen, Knopf „Notfallschild“ drücken, dann G auf der Tastatur
+	_zeige_hangar()
+	await _warte(0.3)
+	_optionen_auf()
+	await _warte(0.4)
+	var knopf: Button = optionen.find_child("Taste_notfallschild", true, false)
+	knopf.pressed.emit()
+	await _warte(0.1)
+	var wartet := knopf.text
+	var g := InputEventKey.new()
+	g.physical_keycode = KEY_G
+	g.keycode = KEY_G
+	g.pressed = true
+	Input.parse_input_event(g)
+	await _warte(0.2)
+	var g_los := g.duplicate()
+	g_los.pressed = false
+	Input.parse_input_event(g_los)
+	await _warte(0.2)
+	ok = pruef.call("Umbelegen", wartet == "Taste drücken …" and knopf.text == "G" and Eingabe.text_fuer("notfallschild") == "G",
+		"Knopf zeigte „%s“, danach „%s“" % [wartet, knopf.text]) and ok
+	var g_wirkt := InputMap.event_is_action(g, "notfallschild")
+	var r := InputEventKey.new()
+	r.physical_keycode = KEY_R
+	ok = pruef.call("Wirkung", g_wirkt and not InputMap.event_is_action(r, "notfallschild"), "G löst Notfallschild aus %s, R nicht mehr %s" % [g_wirkt, not InputMap.event_is_action(r, "notfallschild")]) and ok
+	# Tausch: Scheinwerfer auf G → Notfallschild bekommt F
+	var getauscht := Eingabe.belegen("licht", g)
+	ok = pruef.call("Tausch", getauscht == "notfallschild" and Eingabe.text_fuer("licht") == "G" and Eingabe.text_fuer("notfallschild") == "F",
+		"Scheinwerfer „%s“, Notfallschild „%s“" % [Eingabe.text_fuer("licht"), Eingabe.text_fuer("notfallschild")]) and ok
+	# Maustaste: Rakete auf mittlere Maustaste
+	var mm := InputEventMouseButton.new()
+	mm.button_index = MOUSE_BUTTON_MIDDLE
+	Eingabe.belegen("rakete", mm)
+	# Speichern und Laden: InputMap auf Standard zurück (ohne Speichern), dann aus der Datei laden
+	for a in Eingabe._standard:
+		Eingabe._setze_pc(a, Eingabe._standard[a])
+	var vorher := Eingabe.text_fuer("licht")
+	Eingabe.laden()
+	ok = pruef.call("Gespeichert", vorher == "F" and Eingabe.text_fuer("licht") == "G" and Eingabe.text_fuer("rakete") == "Mittlere Maustaste",
+		"nach Zurücksetzen im Speicher „%s“, nach Laden Scheinwerfer „%s“, Rakete „%s“" % [vorher, Eingabe.text_fuer("licht"), Eingabe.text_fuer("rakete")]) and ok
+	optionen.aufbauen()
+	await _warte(0.4)
+	_foto("optionen_tasten")
+	var hilfe := ""
+	_optionen_zu()
+	await _warte(0.3)
+	for l in hangar.find_children("*", "Label", true, false):
+		if "Nachbrenner" in l.text and "Notfallschild" in l.text:
+			hilfe = l.text
+	ok = pruef.call("Hilfetext", "G Scheinwerfer" in hilfe and "Mittlere Maustaste Rakete" in hilfe, hilfe.get_slice("\n", 1).left(140)) and ok
+	# Standard
+	optionen.aufbauen()
+	(optionen.find_child("TastenStandard", true, false) as Button).pressed.emit()
+	ok = pruef.call("Standard", Eingabe.text_fuer("licht") == "F" and Eingabe.text_fuer("notfallschild") == "R" and Eingabe.text_fuer("rakete") == "Rechte Maustaste",
+		"Scheinwerfer „%s“, Notfallschild „%s“, Rakete „%s“" % [Eingabe.text_fuer("licht"), Eingabe.text_fuer("notfallschild"), Eingabe.text_fuer("rakete")]) and ok
+	for e in erg:
+		Protokoll.schreib("test", "Tasten: " + e)
+	Protokoll.schreib("test", "TASTEN-TEST %s" % ("BESTANDEN" if ok else "FEHLGESCHLAGEN"))
 
 
 ## Neue Gegnerarten (2026-10-10): Bild je Art, dann jedes Verhalten gemessen.

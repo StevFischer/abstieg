@@ -134,10 +134,14 @@ func aufbauen() -> void:
 	ende.pressed.connect(func(): beenden.emit())
 	ende.visible = not OS.has_feature("web")     # im Browser beendet man mit dem Tab
 	spalte.add_child(ende)
-	# Auf dem Handy nur die Controller-Zeile: Maus und Tastatur gibt es dort nicht.
+	# Auf dem Handy nur die Controller-Zeile: Maus und Tastatur gibt es dort nicht. Tastennamen aus der Belegung.
+	var E := Eingabe
 	var tastatur := "" if OS.has_feature("android") else \
-		"Maus drehen · WASD fliegen · Leertaste/Strg hoch/runter · Q/E rollen · Linke Maustaste Laser · Rechte Rakete\n" + \
-		"1–4 Laser wählen · 5–8 Rakete wählen · Umschalt Nachbrenner · R Notfallschild · Tab Leitstrahl · F Scheinwerfer · Esc Pause\n"
+		("Maus drehen · %s/%s/%s/%s fliegen · %s/%s hoch/runter · %s/%s rollen · %s Laser · %s Rakete\n" % [
+			E.text_fuer("vor"), E.text_fuer("links"), E.text_fuer("zurueck"), E.text_fuer("rechts"), E.text_fuer("hoch"),
+			E.text_fuer("runter"), E.text_fuer("rollen_links"), E.text_fuer("rollen_rechts"), E.text_fuer("feuer"), E.text_fuer("rakete")]) + \
+		("Waffen %s … %s · %s Nachbrenner · %s Notfallschild · %s Leitstrahl · %s Scheinwerfer · %s Pause · Tasten änderbar unter Optionen\n" % [
+			E.text_fuer("waffe_1"), E.text_fuer("waffe_8"), E.text_fuer("nachbrenner"), E.text_fuer("notfallschild"), E.text_fuer("leitstrahl"), E.text_fuer("licht"), E.text_fuer("pause")])
 	spalte.add_child(_label(tastatur +
 		"Controller: linker Stick fliegen · rechter Stick drehen · LB/RB rollen · A/B hoch/runter · RT Laser · LT Rakete · X Nachbrenner · R3 Notfallschild · Steuerkreuz ←→ Laser, ↑↓ Rakete · Hangar: LB/RB Reiter",
 		16, Color(0.6, 0.58, 0.52), true))
