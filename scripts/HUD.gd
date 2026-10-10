@@ -7,11 +7,9 @@ const GELB := Color(1.0, 0.82, 0.3)
 const ROT := Color(1.0, 0.3, 0.25)
 
 var _schild: ProgressBar
-var _energie: ProgressBar
 var _huelle: ProgressBar
 var _huelle_txt: Label
 var _schild_txt: Label
-var _energie_txt: Label
 var _raketen: Label
 var _laser: Label
 var _tiefe: Label
@@ -52,7 +50,7 @@ func _init() -> void:
 	wurzel.add_child(_zeichnung)
 
 	var unten := VBoxContainer.new()
-	_ecke(unten, 0, 1, Vector2(30, -285), Vector2(520, -30))
+	_ecke(unten, 0, 1, Vector2(30, -230), Vector2(520, -30))
 	wurzel.add_child(unten)
 	_schild_txt = _label("SCHILD", 22, GRUEN)
 	unten.add_child(_schild_txt)
@@ -62,10 +60,6 @@ func _init() -> void:
 	unten.add_child(_huelle_txt)
 	_huelle = _balken(Color(1.0, 0.55, 0.2))
 	unten.add_child(_huelle)
-	_energie_txt = _label("ENERGIE", 22, GELB)
-	unten.add_child(_energie_txt)
-	_energie = _balken(GELB)
-	unten.add_child(_energie)
 	_laser = _label("LASER", 22, Color(1.0, 0.55, 0.45))
 	unten.add_child(_laser)
 	_raketen = _label("RAKETEN 0", 22, ROT)
@@ -149,9 +143,6 @@ func werte(s: Schiff) -> void:
 	_huelle.value = s.huelle
 	_huelle_txt.text = "HÜLLE %d / %d" % [ceili(s.huelle), int(s.huelle_max)]
 	_huelle_txt.add_theme_color_override("font_color", ROT if s.huelle < s.huelle_max * 0.3 else Color(1.0, 0.6, 0.25))
-	_energie.max_value = s.energie_max
-	_energie.value = s.energie
-	_energie_txt.text = "ENERGIE %d" % int(s.energie)
 	var r := Waffen.finde(s.rakete_wahl)
 	_raketen.text = "RAKETEN %d / %d  ·  %s" % [s.raketen, s.raketen_max, r.name]
 	_laser.text = "LASER  ·  %s" % Waffen.finde(s.laser_wahl).name

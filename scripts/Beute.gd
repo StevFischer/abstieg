@@ -2,13 +2,12 @@ class_name Beute
 extends Area3D
 ## Aufsammelbares. Jede Art hat eine eigene Form (auch ohne Farbe erkennbar) und ein
 ## Schild mit Name und Menge darüber, das aus der Nähe sichtbar wird.
-## Erz (Kristallbündel), Schild (Kugel mit Ring), Reparatur (Kreuz), Energie (Batterie), Rakete.
+## Erz (Kristallbündel), Schild (Kugel mit Ring), Reparatur (Kreuz), Rakete.
 
 const ARTEN := {
 	"erz": {"farbe": Color(1.0, 0.8, 0.2), "menge": 5, "name": "ERZ"},
 	"schild": {"farbe": Color(0.3, 0.6, 1.0), "menge": 25, "name": "SCHILD"},
 	"reparatur": {"farbe": Color(0.3, 1.0, 0.45), "menge": 30, "name": "HÜLLE"},
-	"energie": {"farbe": Color(0.85, 1.0, 0.3), "menge": 30, "name": "ENERGIE"},
 	"rakete": {"farbe": Color(1.0, 0.3, 0.3), "menge": 2, "name": "RAKETEN"},
 }
 const SICHTWEITE := 30.0   ## ab hier erscheint das Namensschild
@@ -77,23 +76,6 @@ func _ready() -> void:
 			_teil(_box(Vector3(0.3, 1.0, 0.3)), Vector3.ZERO)
 			_teil(_box(Vector3(1.0, 0.3, 0.3)), Vector3.ZERO)
 			_teil(_box(Vector3(0.36, 0.36, 0.36)), Vector3.ZERO, _glanz)
-		"energie":
-			var zelle := CylinderMesh.new()
-			zelle.top_radius = 0.28
-			zelle.bottom_radius = 0.28
-			zelle.height = 0.8
-			_teil(zelle, Vector3.ZERO)
-			var pol := CylinderMesh.new()
-			pol.top_radius = 0.12
-			pol.bottom_radius = 0.12
-			pol.height = 0.16
-			_teil(pol, Vector3(0, 0.48, 0), _glanz)
-			for y in [-0.2, 0.0, 0.2]:
-				var band := CylinderMesh.new()
-				band.top_radius = 0.3
-				band.bottom_radius = 0.3
-				band.height = 0.06
-				_teil(band, Vector3(0, y, 0), _glanz)
 		"rakete":
 			for x in [-0.22, 0.22]:
 				var rumpf := CylinderMesh.new()

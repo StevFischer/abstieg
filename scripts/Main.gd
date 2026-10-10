@@ -211,7 +211,7 @@ func _gegner_setzen() -> int:
 				_gegner("drohne", mitte + Vector3(_rng.randf_range(-2, 2), _rng.randf_range(-1, 1), _rng.randf_range(-2, 2)))
 			zahl += 5
 		if _rng.randf() < 0.35:
-			var art: String = ["schild", "reparatur", "energie", "rakete", "erz", "erz"][_rng.randi_range(0, 5)]
+			var art: String = ["schild", "reparatur", "rakete", "erz", "erz"][_rng.randi_range(0, 4)]
 			level.add_child(Beute.neu(art, LevelGen.welt_von(zellen[_rng.randi_range(0, zellen.size() - 1)])))
 		# Wache im langen Stollen davor
 		var weg: Array = gen.raeume[i].tunnel
@@ -302,7 +302,7 @@ func _gegner_weg(g: Gegner) -> void:
 		Protokoll.schreib("level", "Boss %s besiegt auf Tiefe %d" % [g.boss_name(), tiefe])
 		boss = null
 	if _rng.randf() < 0.2:
-		var art: String = ["schild", "reparatur", "energie", "rakete"][_rng.randi_range(0, 3)]
+		var art: String = ["schild", "reparatur", "rakete"][_rng.randi_range(0, 2)]
 		level.add_child.call_deferred(Beute.neu(art, g.global_position + Vector3(0, 1.2, 0)))
 
 
@@ -671,7 +671,6 @@ func _waffen_schau() -> void:
 		ziele.append(g)
 	for w in Waffen.LASER + Waffen.RAKETEN:
 		schiff.waehle(w.id)
-		schiff.energie = schiff.energie_max
 		schiff.raketen = 99
 		var vorher := []
 		for z in ziele:
@@ -682,7 +681,7 @@ func _waffen_schau() -> void:
 			var t0 := Time.get_ticks_msec()
 			var foto_gemacht := false
 			while Time.get_ticks_msec() - t0 < 1500:
-				if schiff._laser_cd <= 0.0 and schiff.energie >= w.energie:
+				if schiff._laser_cd <= 0.0:
 					schiff.laser_schuss()
 					schuesse += int(w.anzahl)
 				if not foto_gemacht and Time.get_ticks_msec() - t0 > 250:
@@ -925,7 +924,6 @@ func _gegner_schau2() -> void:
 	for i in 12:
 		if is_instance_valid(j):
 			schiff.look_at(j.global_position, Vector3.UP)
-		schiff.energie = schiff.energie_max
 		schiff.laser_schuss()
 		await _warte(0.18)
 	erg.append("Ausweichen: %d Ausweichmanöver bei 12 Schüssen" % (Gegner.ausweicher - aus_vor))

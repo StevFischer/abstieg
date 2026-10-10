@@ -6,7 +6,6 @@ const AUFRUESTUNGEN := [
 	{"id": "schild", "name": "Schildgenerator", "text": "+25 Schild", "kosten": 40, "max": 8},
 	{"id": "panzerung", "name": "Panzerung", "text": "+25 Hülle", "kosten": 40, "max": 8},
 	{"id": "laser", "name": "Laserbündelung", "text": "+20 % Laserschaden", "kosten": 50, "max": 8},
-	{"id": "energie", "name": "Energiewandler", "text": "+30 % Energie-Nachladen", "kosten": 35, "max": 6},
 	{"id": "triebwerk", "name": "Triebwerk", "text": "+8 % Tempo", "kosten": 45, "max": 5},
 	{"id": "raketen", "name": "Raketenschacht", "text": "+2 Raketen", "kosten": 30, "max": 6},
 ]
@@ -83,7 +82,6 @@ func schiffswerte() -> Dictionary:
 		"schild_max": 50.0 + 25.0 * stufe("schild"),
 		"huelle_max": 100.0 + 25.0 * stufe("panzerung"),
 		"laser_mult": 1.0 + 0.2 * stufe("laser"),
-		"energie_regen": 1.0 * (1.0 + 0.3 * stufe("energie")),
 		"tempo": 14.0 * (1.0 + 0.08 * stufe("triebwerk")),
 		"raketen_max": 4 + 2 * stufe("raketen"),
 	}
@@ -110,6 +108,16 @@ func laden() -> void:
 	laeufe = c.get_value("meta", "laeufe", 0)
 	stufen = c.get_value("meta", "stufen", {})
 	waffen = c.get_value("meta", "waffen", [])
+	# Energie gibt es seit 2026-10-10 nicht mehr (Stev: „macht keinen Spaß“): gekaufte Energiewandler
+	# werden einmalig als Erz zurückgebucht.
+	if stufen.has("energie"):
+		var zurueck := 0
+		for k in int(stufen.energie):
+			zurueck += int(round(35 * pow(1.6, k)))
+		bank += zurueck
+		stufen.erase("energie")
+		speichern()
+		Protokoll.schreib("meta", "Energiewandler abgeschafft: %d Erz zurückgebucht, Bank jetzt %d" % [zurueck, bank])
 
 
 func speichern() -> void:

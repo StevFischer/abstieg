@@ -27,9 +27,6 @@ var schild := 100.0
 ## nur Reparatur-Fundstücke und der Tiefenwechsel bringen sie zurück.
 var huelle_max := 100.0
 var huelle := 100.0
-var energie_max := 100.0
-var energie := 100.0
-var energie_regen := 3.0
 var raketen_max := 4
 var raketen := 4
 var laser_mult := 1.0
@@ -80,11 +77,9 @@ func werte_setzen(w: Dictionary) -> void:
 	huelle_max = w.huelle_max
 	huelle = huelle_max
 	laser_mult = w.laser_mult
-	energie_regen = w.energie_regen
 	tempo = w.tempo
 	raketen_max = w.raketen_max
 	raketen = raketen_max
-	energie = energie_max
 
 
 func _unhandled_input(e: InputEvent) -> void:
@@ -130,7 +125,6 @@ func _physics_process(dt: float) -> void:
 	velocity = velocity.lerp(soll, 1.0 - exp(-2.5 * dt))
 	move_and_slide()
 	_waffen(dt)
-	energie = minf(energie_max, energie + energie_regen * dt)
 	schild_laden(dt)
 
 
@@ -173,8 +167,7 @@ func _waffen(dt: float) -> void:
 	_raketen_cd -= dt
 	if welt == null:
 		return
-	var l := Waffen.finde(laser_wahl)
-	if Input.is_action_pressed("feuer") and _laser_cd <= 0.0 and energie >= l.energie:
+	if Input.is_action_pressed("feuer") and _laser_cd <= 0.0:
 		laser_schuss()
 	var r := Waffen.finde(rakete_wahl)
 	if Input.is_action_just_pressed("rakete") and _raketen_cd <= 0.0 and raketen >= int(r.kosten_munition):
@@ -184,7 +177,6 @@ func _waffen(dt: float) -> void:
 func laser_schuss() -> void:
 	var w := Waffen.finde(laser_wahl)
 	_laser_cd = w.cd
-	energie -= w.energie
 	_seite = -_seite
 	var versatz := 0.45 * _seite if w.anzahl == 1 else 0.0
 	var start := global_transform * Vector3(versatz, -0.3, -1.0)
@@ -254,10 +246,6 @@ func _aufnehmen(art: String, menge: int) -> bool:
 			if huelle >= huelle_max:
 				return false
 			huelle = minf(huelle_max, huelle + menge)
-		"energie":
-			if energie >= energie_max:
-				return false
-			energie = minf(energie_max, energie + menge)
 		"rakete":
 			if raketen >= raketen_max:
 				return false

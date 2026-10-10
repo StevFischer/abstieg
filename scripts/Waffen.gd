@@ -3,22 +3,22 @@ extends RefCounted
 ## Alle Laser und Raketen. Zwillingslaser und Zielsuchrakete hat man von Anfang an,
 ## der Rest wird im Hangar dauerhaft freigeschaltet. Im Flug: Laser 1–4, Raketen 5–8.
 ##
-## Laser kosten Energie, Raketen Munition (die Zahl "kosten_munition").
+## Laser schießen unbegrenzt, Raketen kosten Munition (die Zahl "kosten_munition").
 ## "flaeche": Explosionsradius mit Schaden an allem in der Nähe (auch am eigenen Schiff).
 ## "splitter": beim Einschlag so viele kleine Zielsucher in alle Richtungen.
 
 const LASER := [
 	{"id": "zwilling", "name": "Zwillingslaser", "preis": 0, "text": "zwei Läufe im Wechsel",
-		"cd": 0.14, "energie": 1.0, "schaden": 12.0, "tempo": 90.0, "anzahl": 1, "streuung": 0.0,
+		"cd": 0.14, "schaden": 12.0, "tempo": 90.0, "anzahl": 1, "streuung": 0.0,
 		"farbe": Color(1.0, 0.3, 0.2), "groesse": 1.0, "ton": "laser", "tonhoehe": 1.0, "db": -9.0},
 	{"id": "streu", "name": "Streufeuer", "preis": 120, "text": "drei Bolzen im Fächer",
-		"cd": 0.22, "energie": 2.0, "schaden": 9.0, "tempo": 80.0, "anzahl": 3, "streuung": 6.0,
+		"cd": 0.22, "schaden": 9.0, "tempo": 80.0, "anzahl": 3, "streuung": 6.0,
 		"farbe": Color(0.35, 1.0, 0.35), "groesse": 1.0, "ton": "laser", "tonhoehe": 0.85, "db": -8.0},
 	{"id": "vulkan", "name": "Vulkan", "preis": 150, "text": "sehr schnelles Dauerfeuer",
-		"cd": 0.055, "energie": 0.5, "schaden": 5.0, "tempo": 110.0, "anzahl": 1, "streuung": 1.5,
+		"cd": 0.055, "schaden": 5.0, "tempo": 110.0, "anzahl": 1, "streuung": 1.5,
 		"farbe": Color(1.0, 0.9, 0.3), "groesse": 0.7, "ton": "laser", "tonhoehe": 1.45, "db": -15.0},
 	{"id": "plasma", "name": "Plasma", "preis": 180, "text": "langsame, schwere Kugeln",
-		"cd": 0.42, "energie": 3.5, "schaden": 40.0, "tempo": 45.0, "anzahl": 1, "streuung": 0.0,
+		"cd": 0.42, "schaden": 40.0, "tempo": 45.0, "anzahl": 1, "streuung": 0.0,
 		"farbe": Color(0.3, 0.8, 1.0), "groesse": 2.6, "ton": "laser_gegner", "tonhoehe": 0.6, "db": -4.0},
 ]
 
