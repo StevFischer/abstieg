@@ -802,13 +802,21 @@ func _autotest() -> void:
 			if not gut or schiff.raketen != schiff.raketen_max or meldung[0] != "RAKETEN +%d" % (schiff.raketen_max - vorher):
 				erg.append("FEHLER")
 		var voll_genommen := schiff.aufnehmen("rakete", 2)
+		for vorher in [10.0, schiff.huelle_max * 0.7]:
+			schiff.huelle = vorher
+			var gut := schiff.aufnehmen("reparatur", 30)
+			erg.append("Hülle %.0f/%.0f → %.0f, Meldung „%s“" % [vorher, schiff.huelle_max, schiff.huelle, meldung[0]])
+			if not gut or schiff.huelle != schiff.huelle_max or meldung[0] != "HÜLLE +%d" % ceili(schiff.huelle_max - vorher):
+				erg.append("FEHLER")
+		voll_genommen = voll_genommen or schiff.aufnehmen("reparatur", 30)
+		var rep_text := Beute.schild_text("reparatur", 30)
 		var b := Beute.neu("rakete", schiff.global_position - schiff.global_basis.z * 6.0)
 		level.add_child(b)
 		await _warte(0.4)
 		var schild_text: String = (b.get_children().filter(func(c): return c is Label3D)[0] as Label3D).text
-		var ok: bool = not "FEHLER" in erg and not voll_genommen and schild_text == "RAKETEN · AUFFÜLLEN"
-		Protokoll.schreib("test", "Raketenfund: %s; bei vollem Vorrat genommen %s; Schild im Bergwerk „%s“ → %s" % [
-			"; ".join(erg), voll_genommen, schild_text, "BESTANDEN" if ok else "FEHLGESCHLAGEN"])
+		var ok: bool = not "FEHLER" in erg and not voll_genommen and schild_text == "RAKETEN · AUFFÜLLEN" and rep_text == "HÜLLE · VOLL REPARIEREN"
+		Protokoll.schreib("test", "Raketen-/Reparaturfund: %s; bei vollem Vorrat genommen %s; Schilder im Bergwerk „%s“, „%s“ → %s" % [
+			"; ".join(erg), voll_genommen, schild_text, rep_text, "BESTANDEN" if ok else "FEHLGESCHLAGEN"])
 		get_tree().quit(0)
 		return
 	if "--ton-test" in OS.get_cmdline_user_args():
@@ -2543,7 +2551,7 @@ func _beute_schau() -> void:
 			level.add_child(Beute.neu(arten[i], p))
 	await _warte(1.5)
 	_foto("beute_reihe")
-	# In die Reparatur der vorderen Reihe fliegen: Meldung "HÜLLE +30"
+	# In die Reparatur der vorderen Reihe fliegen: Hülle wird voll repariert
 	var ziel: Vector3 = schiff.global_position + vor * 8.0 + rechts * (arten.find("reparatur") - 2) * 3.4 + Vector3(0, -0.8, 0)
 	schiff.autopilot.append(ziel)
 	await _warte(1.2)

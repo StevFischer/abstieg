@@ -396,6 +396,8 @@ func aufnehmen(art: String, menge: int) -> bool:
 		menge = int(round((menge + (1 if f.has("b_sonde") else 0)) * erz_mult))      # Erzsonde, Raffinerie
 	elif art == "rakete":
 		menge = raketen_max - raketen        # Meldung zeigt, wie viele wirklich dazukamen
+	elif art == "reparatur":
+		menge = ceili(huelle_max - huelle)
 	var genommen := _aufnehmen(art, menge)
 	if genommen:
 		aufgenommen.emit(art, menge)
@@ -413,7 +415,7 @@ func _aufnehmen(art: String, menge: int) -> bool:
 		"reparatur":
 			if huelle >= huelle_max:
 				return false
-			huelle = minf(huelle_max, huelle + menge)
+			huelle = huelle_max   # Stev 2026-10-10: ein Reparaturfund repariert alles, nicht nur +30
 		"rakete":         # Stev 2026-10-10: ein Raketenfund füllt alle Raketen auf, nicht nur +2
 			if raketen >= raketen_max:
 				return false

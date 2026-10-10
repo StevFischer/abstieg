@@ -36,9 +36,14 @@ static func beschriftung(p_art: String, p_menge: int) -> String:
 	return "%s +%d" % [ARTEN[p_art].name, p_menge]
 
 
-## Schild über dem Fundstück im Bergwerk: Raketen füllen immer ganz auf.
+## Schild über dem Fundstück im Bergwerk: Raketen und Reparatur füllen immer ganz auf.
 static func schild_text(p_art: String, p_menge: int) -> String:
-	return "RAKETEN · AUFFÜLLEN" if p_art == "rakete" else beschriftung(p_art, p_menge)
+	match p_art:
+		"rakete":
+			return "RAKETEN · AUFFÜLLEN"
+		"reparatur":
+			return "HÜLLE · VOLL REPARIEREN"
+	return beschriftung(p_art, p_menge)
 
 
 ## Aufnahmekugel. Mit dem Schiffsradius 0,9 m wird Beute bis 4,6 m Mittelpunktabstand eingesammelt
