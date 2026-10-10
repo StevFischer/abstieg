@@ -8,7 +8,7 @@ signal optionen
 
 const ORANGE := Color(1.0, 0.6, 0.2)
 const ART_FARBE := {"kampf": Color(1.0, 0.35, 0.3), "ueberleben": Color(0.4, 0.75, 1.0),
-	"wirtschaft": Color(1.0, 0.82, 0.3), "werkzeuge": Color(0.35, 0.95, 0.85), "forschung": Color(0.75, 0.55, 1.0), "module": Color(1.0, 0.6, 0.15), "pakt": Color(1.0, 0.3, 0.3)}
+	"wirtschaft": Color(1.0, 0.82, 0.3), "werkzeuge": Color(0.35, 0.95, 0.85), "forschung": Color(0.75, 0.55, 1.0), "module": Color(1.0, 0.6, 0.15), "pakt": Color(1.0, 0.3, 0.3), "station": Color(0.55, 0.85, 0.75)}
 const ZWEIG_FARBE := {"Waffen": Color(1.0, 0.35, 0.3), "Schiff": Color(0.4, 0.75, 1.0),
 	"Bergbau": Color(1.0, 0.82, 0.3), "Taktik": Color(0.35, 0.95, 0.85)}
 
@@ -72,7 +72,6 @@ func aufbauen() -> void:
 	rechts.add_theme_constant_override("separation", 10)
 	zwei.add_child(rechts)
 	_waffen_spalte(rechts)
-	links.add_child(_label("AUFRÜSTUNGEN — bleiben nach dem Tod", 22, ORANGE, false))
 	var erster: Button = null
 	_reiter_zeile(links)
 	var raster := GridContainer.new()
@@ -83,13 +82,14 @@ func aufbauen() -> void:
 	for a in Meta.AUFRUESTUNGEN:
 		if a.art == _reiter:
 			raster.add_child(_aufruestkarte(a))
-	if _reiter in ["forschung", "module", "pakt"]:
+	if _reiter in ["forschung", "module", "pakt", "station"]:
 		links.remove_child(raster)
 		raster.queue_free()
 		match _reiter:
 			"forschung": _forschungsbaum(links)
 			"module": _module_ansicht(links)
 			"pakt": _pakt_ansicht(links)
+			"station": _station_ansicht(links)
 	_info = _label("Steuerkreuz/Maus auf eine Karte: Name und Werte erscheinen hier.", 17, Color(0.7, 0.68, 0.6), true)
 	_info.custom_minimum_size = Vector2(0, 52)
 	_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -184,14 +184,20 @@ const AUF_FARBE := {"schild": Color(0.35, 0.65, 1.0), "panzerung": Color(1.0, 0.
 
 ## Reiter nach Art: Schiff · Kampf · Überleben · Wirtschaft · Werkzeuge. Mit LB/RB oder Steuerkreuz wechselbar.
 ## Gesperrte Reiter (noch kein Boss) sind wählbar und zeigen, ab wann sie freigeschaltet werden.
+## Zwei Zeilen: oben die Aufrüstungs-Arten, unten Forschung · Module · Pakt · Station (die Zeile ersetzt
+## die frühere Überschrift „AUFRÜSTUNGEN“, damit die Seite nicht höher wird).
 func _reiter_zeile(links: VBoxContainer) -> void:
-	var reihe := HBoxContainer.new()
-	reihe.name = "Reiter"
-	reihe.add_theme_constant_override("separation", 6)
-	links.add_child(reihe)
+	var zeilen: Array[HBoxContainer] = []
+	for z in 2:
+		var hb := HBoxContainer.new()
+		hb.name = "Reiter" if z == 0 else "Reiter2"
+		hb.add_theme_constant_override("separation", 6)
+		links.add_child(hb)
+		zeilen.append(hb)
 	var gruppe := ButtonGroup.new()
 	for r in Meta.REITER:
 		var id: String = r[0]
+		var reihe: HBoxContainer = zeilen[1] if id in ["forschung", "module", "pakt", "station"] else zeilen[0]
 		var b := Button.new()
 		b.name = "Reiter_" + id
 		var neu := 0
@@ -207,6 +213,11 @@ func _reiter_zeile(links: VBoxContainer) -> void:
 		if id == "pakt":
 			frei = Meta.pakt_frei()
 			neu = Meta.pakt_punkte()
+		if id == "station":
+			frei = true
+			for gb in Meta.GEBAEUDE:
+				if Meta.ausbaubar(gb.id):
+					neu += 1
 		if id == "forschung":
 			frei = true
 			for k in Meta.FORSCHUNG:
@@ -310,8 +321,8 @@ func _module_ansicht(links: VBoxContainer) -> void:
 	var kopf := HBoxContainer.new()
 	kopf.add_theme_constant_override("separation", 16)
 	links.add_child(kopf)
-	var info := _label("Bauteile: %d   ·   Inventar %d/%d   ·   A/Klick einbauen · Y/Rechtsklick zerlegen" % [
-		Meta.bauteile, Meta.module.size(), Module.INVENTAR_MAX], 15, ART_FARBE.module, false)
+	var info := _label("Bauteile %d · Kristalle %d · Inventar %d/%d   ·   A einbauen · Y zerlegen · X aufwerten" % [
+		Meta.bauteile, Meta.kristalle, Meta.module.size(), Meta.inventar_max()], 14, ART_FARBE.module, false)
 	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	kopf.add_child(info)
 	var alle := Button.new()
@@ -386,14 +397,19 @@ func _module_ansicht(links: VBoxContainer) -> void:
 		b.add_theme_color_override("font_color", farbe)
 		var alt: Dictionary = Meta.eingebaut.get(m.platz, {})
 		# Zwei Zeilen fürs Infofeld: Name + was es ersetzt, dann die Eigenschaften und der Zerlegewert
-		var tip := "%s   ·   ersetzt: %s\n%s   ·   zerlegen +%d Bauteile" % [Module.beschreibung(m).get_slice("\n", 0),
-			Module.name_von(alt) if not alt.is_empty() else "nichts", Module.beschreibung(m).get_slice("\n", 1), Module.bauteile_wert(m)]
+		var ak := Meta.aufwert_kosten(m)
+		var auf_text := ("aufwerten %d Kr + %d Bt" % [ak[0], ak[1]]) if int(m.get("auf", 0)) < Meta.gebaeude_stufe("werkstatt") else "aufwerten: Werkstatt nötig"
+		var tip := "%s   ·   ersetzt: %s\n%s   ·   zerlegen +%d Bt   ·   %s" % [Module.beschreibung(m).get_slice("\n", 0),
+			Module.name_von(alt) if not alt.is_empty() else "nichts", Module.beschreibung(m).get_slice("\n", 1), Module.bauteile_wert(m), auf_text]
 		b.tooltip_text = tip
 		var idx: int = i
 		_knopf(b, true, tip, func(): return Meta.modul_einbauen(idx), "")
 		b.gui_input.connect(func(e: InputEvent):
 			if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_RIGHT:
-				modul_zerlegen_knopf(idx))
+				modul_zerlegen_knopf(idx)
+			elif e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT and e.shift_pressed:
+				modul_aufwerten_knopf(idx)
+				get_viewport().set_input_as_handled())
 		gitter.add_child(b)
 
 
@@ -445,6 +461,64 @@ func _modul_stil(farbe: Color, gefuellt: bool) -> StyleBoxFlat:
 	return st
 
 
+func modul_aufwerten_knopf(index: int) -> void:
+	if index < 0 or index >= Meta.module.size():
+		return
+	var m: Dictionary = Meta.module[index]
+	if not Meta.modul_aufwerten(m):
+		_info_zeigen("Aufwerten geht nicht: " + ("Werkstatt ausbauen" if int(m.get("auf", 0)) >= Meta.gebaeude_stufe("werkstatt") else "zu wenig Kristalle oder Bauteile"), true)
+		return
+	_fokus_merken = "Modul_%d" % index
+	aufbauen()
+
+
+## Station: vier Gebäude als Karten mit Stufenpunkten, Wirkung und Kosten.
+func _station_ansicht(links: VBoxContainer) -> void:
+	links.add_child(_label("Erz %d   ·   Kristalle %d   ·   Bauteile %d" % [Meta.bank, Meta.kristalle, Meta.bauteile],
+		16, ART_FARBE.station, false))
+	var raster := GridContainer.new()
+	raster.name = "Gebaeude"
+	raster.columns = 2
+	raster.add_theme_constant_override("h_separation", 10)
+	raster.add_theme_constant_override("v_separation", 8)
+	links.add_child(raster)
+	for gb in Meta.GEBAEUDE:
+		var id: String = gb.id
+		var st := Meta.gebaeude_stufe(id)
+		var farbe: Color = ART_FARBE.station
+		var karte := PanelContainer.new()
+		karte.custom_minimum_size = Vector2(350, 0)
+		karte.add_theme_stylebox_override("panel", _modul_stil(farbe if st > 0 else Color(0.4, 0.45, 0.43), st > 0))
+		var sp := VBoxContainer.new()
+		sp.add_theme_constant_override("separation", 2)
+		karte.add_child(sp)
+		var kopf := HBoxContainer.new()
+		sp.add_child(kopf)
+		var sym := WaffenSymbol.new("auf_" + id, farbe)
+		sym.custom_minimum_size = Vector2(44, 44)
+		kopf.add_child(sym)
+		var txt := VBoxContainer.new()
+		txt.add_theme_constant_override("separation", 0)
+		kopf.add_child(txt)
+		txt.add_child(_label("%s   %s" % [gb.name, "●".repeat(st) + "○".repeat(3 - st)], 16, farbe if st > 0 else Color(0.8, 0.8, 0.78), false))
+		var t := _label(gb.text, 12, Color(0.75, 0.72, 0.68), false)
+		txt.add_child(t)
+		var b := Button.new()
+		b.name = "Bau_" + id
+		b.custom_minimum_size = Vector2(0, 30)
+		b.add_theme_font_size_override("font_size", 13)
+		var k := Meta.gebaeude_kosten(id)
+		var tip := "%s: Stufe %d/3 — %s" % [gb.name, st, gb.text]
+		if k.is_empty():
+			b.text = "ganz ausgebaut"
+			_knopf(b, false, tip, func(): return false, "Schon ganz ausgebaut")
+		else:
+			b.text = "%s · %d Erz · %d Kristalle · %d Bauteile" % ["Bauen" if st == 0 else "Ausbauen", k[0], k[1], k[2]]
+			_knopf(b, Meta.ausbaubar(id), tip, func(): return Meta.ausbauen(id), "Zu wenig Erz, Kristalle oder Bauteile")
+		sp.add_child(b)
+		raster.add_child(karte)
+
+
 func modul_zerlegen_knopf(index: int) -> void:
 	Meta.modul_zerlegen(index)
 	_fokus_merken = "Modul_%d" % mini(index, Meta.module.size() - 1)
@@ -467,6 +541,13 @@ func _unhandled_input(e: InputEvent) -> void:
 		schritt = 1
 	elif e.is_action_pressed("rollen_links"):
 		schritt = -1
+	# X auf einem Inventar-Modul: aufwerten (Werkstatt)
+	if e.is_action_pressed("nachbrenner") and not Input.is_key_pressed(KEY_SHIFT):
+		var fx := get_viewport().gui_get_focus_owner()
+		if fx != null and fx.has_meta("modul_index"):
+			modul_aufwerten_knopf(int(fx.get_meta("modul_index")))
+			get_viewport().set_input_as_handled()
+		return
 	# Y auf einem Inventar-Modul: zerlegen
 	if e.is_action_pressed("licht"):
 		var f := get_viewport().gui_get_focus_owner()

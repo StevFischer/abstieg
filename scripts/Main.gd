@@ -107,6 +107,9 @@ func _starte_lauf() -> void:
 	schiff.gestorben.connect(func(): _schiff_tot("Schiff zerstört"))
 	schiff.getroffen.connect(func(s: float): hud.blitz(s))
 	schiff.erz_gefunden.connect(func(m: int): level_erz += m)
+	schiff.kristall_gefunden.connect(func(m: int):
+		Meta.kristalle += m        # sofort gesichert wie Module
+		Meta.speichern())
 	schiff.modul_gefunden.connect(func(m: Dictionary):
 		var weg := Meta.modul_hinzu(m)
 		hud.aufnahme(Module.name_von(m).to_upper() + ("  (Inventar voll: %s zerlegt)" % Module.name_von(weg) if not weg.is_empty() else ""), Module.farbe(m)))
@@ -270,6 +273,9 @@ func _gegner_setzen() -> int:
 			for k in schwarm:
 				_gegner("drohne", mitte + Vector3(_rng.randf_range(-2, 2), _rng.randf_range(-1, 1), _rng.randf_range(-2, 2)))
 			zahl += schwarm
+		# Kristalle: in jedem Raum mit 20 %, in der Kristallader mit 60 %
+		if _rng.randf() < (0.6 if thema.name.begins_with("Kristallader") else 0.2):
+			level.add_child(Beute.neu("kristall", LevelGen.welt_von(zellen[_rng.randi_range(0, zellen.size() - 1)])))
 		if _rng.randf() < 0.35:
 			var art: String = ["schild", "reparatur", "rakete", "erz", "erz"][_rng.randi_range(0, 4)]
 			level.add_child(Beute.neu(art, LevelGen.welt_von(zellen[_rng.randi_range(0, zellen.size() - 1)])))
@@ -396,6 +402,8 @@ func _gegner_weg(g: Gegner) -> void:
 		_pakt_meilenstein(g.global_position)
 	elif _rng.randf() < MODUL_CHANCE * (1.0 + 0.05 * Meta.pakt_punkte()):
 		_modul_fallen(g.global_position + Vector3(0, 0.6, 0), false)
+	if _rng.randf() < 0.06:
+		level.add_child.call_deferred(Beute.neu("kristall", g.global_position + Vector3(0, -0.6, 0)))
 	if g.ist_boss:
 		for i in 8:     # Bossbeute: ein Kranz aus Erz
 			var p := g.global_position + Vector3(cos(TAU * i / 8.0), 0.3 * (i % 2), sin(TAU * i / 8.0)) * 2.5
@@ -500,12 +508,17 @@ func _schiff_tot(grund: String) -> void:
 	Effekte.explosion(level, schiff.global_position, Color(1.0, 0.5, 0.2), 6.0)
 	var gerettet := gerettetes_erz()
 	Meta.bank += gerettet
+	var raffiniert := Meta.raffinerie_ertrag()       # Station: Raffinerie liefert nach jedem Lauf
+	Meta.bank += raffiniert
 	lauf_erz += gerettet
 	Meta.speichern()
+	if raffiniert > 0:
+		Protokoll.schreib("lauf", "Raffinerie liefert %d Erz" % raffiniert)
 	Protokoll.schreib("lauf", "%s auf Tiefe %d, Erz im Lauf %d (davon %d aus dieser Tiefe gerettet), Bank %d" % [
 		grund, tiefe, lauf_erz, gerettet, Meta.bank])
 	hud.status("")
-	hud.mitteilung("%s\nTiefe %d erreicht · %d Erz gesichert" % [grund.to_upper(), tiefe, lauf_erz], 3.5, HUD.ROT)
+	hud.mitteilung("%s\nTiefe %d erreicht · %d Erz gesichert%s" % [grund.to_upper(), tiefe, lauf_erz,
+		("\nRaffinerie +%d Erz" % raffiniert) if raffiniert > 0 else ""], 3.5, HUD.ROT)
 	await get_tree().create_timer(4.5).timeout
 	if not autotest:
 		_zeige_hangar()
@@ -762,6 +775,10 @@ func _autotest() -> void:
 		return
 	if "--zeige-gegner" in OS.get_cmdline_user_args():
 		await _gegner_schau()
+		get_tree().quit(0)
+		return
+	if "--station-test" in OS.get_cmdline_user_args():
+		await _station_test()
 		get_tree().quit(0)
 		return
 	if "--pakt-test" in OS.get_cmdline_user_args():
@@ -1739,6 +1756,106 @@ func _aufwertungs_test() -> void:
 		Protokoll.schreib("test", "Aufwertung: " + e)
 	Protokoll.schreib("test", "AUFWERTUNGS-TEST %s" % ("BESTANDEN" if ok else "FEHLGESCHLAGEN"))
 	Meta.zuruecksetzen()     # Teststände nicht in den nächsten Test mitnehmen (gemeinsamer Autotest-Spielstand)
+
+
+## Station: Kristalle finden, Gebäude bauen, jede Gebäudewirkung, Modul-Aufwertung, Hangar.
+func _station_test() -> void:
+	var erg: Array[String] = []
+	var ok := true
+	var pruef := func(name: String, gut: bool, text: String):
+		erg.append("%s %s: %s" % ["ok  " if gut else "FEHL", name, text])
+		return gut
+	Meta.zuruecksetzen()
+	# Kristalle in den Minen: Kristallader (Tiefe 10) gegen Mondmine (Tiefe 1), je 4 Level
+	Meta.start_tiefe = 1
+	_starte_lauf()
+	await _warte(0.5)
+	var zaehle := func(t: int) -> int:
+		var n := 0
+		for i in 4:
+			tiefe = t
+			_lade_level()
+			n += get_tree().get_nodes_in_group("beute_kristall").size()
+			await get_tree().process_frame
+		return n
+	var in_mond: int = await zaehle.call(1)
+	var in_ader: int = await zaehle.call(10)
+	ok = pruef.call("Kristallfunde", in_mond > 0 and in_ader > in_mond * 2, "4 Level Mondmine %d, 4 Level Kristallader %d" % [in_mond, in_ader]) and ok
+	for g in get_tree().get_nodes_in_group("gegner"):
+		g.free()
+	schiff.unverwundbar = true
+	schiff.aufnehmen("kristall", 3)
+	ok = pruef.call("Kristall aufnehmen", Meta.kristalle == 3, "3 aufgenommen → Kristalle %d (sofort gespeichert)" % Meta.kristalle) and ok
+	# Bauen
+	Meta.bank = 100000
+	Meta.kristalle = 1000
+	Meta.bauteile = 1000
+	ok = pruef.call("Erst Stufe 0", Meta.forschungspunkte_gesamt() == Meta.rekord and Meta.inventar_max() == 24 and Meta.raffinerie_ertrag() == 0, "ohne Gebäude: Punkte = Rekord, Inventar 24, Raffinerie 0") and ok
+	var soll_erz := 0
+	for gb in Meta.GEBAEUDE:
+		for k in gb.kosten:
+			soll_erz += int(k[0])
+		for i in 3:
+			Meta.ausbauen(gb.id)
+	var voll := true
+	for gb in Meta.GEBAEUDE:
+		voll = voll and Meta.gebaeude_stufe(gb.id) == 3 and not Meta.ausbaubar(gb.id)
+	ok = pruef.call("Ausbauen", voll and Meta.bank == 100000 - soll_erz, "alle 4 auf Stufe 3, Erz −%d (Tabelle %d)" % [100000 - Meta.bank, soll_erz]) and ok
+	Meta.laden()
+	ok = pruef.call("Gespeichert", Meta.gebaeude_stufe("labor") == 3, "nach Neuladen Labor Stufe %d" % Meta.gebaeude_stufe("labor")) and ok
+	ok = pruef.call("Labor", Meta.forschungspunkte_gesamt() == Meta.rekord + 6, "Forschungspunkte %d = Rekord %d + 6" % [Meta.forschungspunkte_gesamt(), Meta.rekord]) and ok
+	var rng := RandomNumberGenerator.new()
+	for i in 40:
+		Meta.modul_hinzu(Module.erzeugen(rng, 3))
+	ok = pruef.call("Lager", Meta.inventar_max() == 48 and Meta.module.size() == 40, "Inventar %d/%d nach 40 Funden" % [Meta.module.size(), Meta.inventar_max()]) and ok
+	# Werkstatt: dreimal aufwerten, das vierte Mal nicht
+	var m: Dictionary = Meta.module[0]
+	var w0: float = m.eig[0].wert
+	var kr0 := Meta.kristalle
+	var drei := Meta.modul_aufwerten(m) and Meta.modul_aufwerten(m) and Meta.modul_aufwerten(m)
+	var vierte := Meta.modul_aufwerten(m)
+	ok = pruef.call("Werkstatt", drei and not vierte and is_equal_approx(m.eig[0].wert, w0 * pow(1.15, 3)) and Module.name_von(m).ends_with("+3"),
+		"%s: Wert %.3f → %.3f (×1,15³), 4. Aufwertung abgelehnt, Kristalle −%d" % [Module.name_von(m), w0, m.eig[0].wert, kr0 - Meta.kristalle]) and ok
+	# Raffinerie beim Laufende
+	var bank0 := Meta.bank
+	level_erz = 40
+	zustand = "flug"
+	_schiff_tot("Test")
+	ok = pruef.call("Raffinerie", Meta.bank - bank0 == 20 + 120, "Laufende: Bank +%d (20 gerettet + 120 Raffinerie)" % (Meta.bank - bank0)) and ok
+	await _warte(5.0)
+	# Hangar: Station und Aufwerten per Controller
+	Meta.gebaeude = {"raffinerie": 1, "werkstatt": 1}
+	Meta.bank = 800
+	Meta.kristalle = 60
+	Meta.bauteile = 40
+	Meta.module = Meta.module.slice(0, 8)
+	for x in Meta.module:
+		x.erase("auf")
+	Meta.speichern()
+	_zeige_hangar()
+	hangar.reiter_waehlen("station")
+	await _warte(0.6)
+	var b := hangar.find_child("Bau_labor", true, false) as Button
+	b.grab_focus()
+	await _warte(0.2)
+	await _knopf_druck(JOY_BUTTON_A)
+	await _warte(0.3)
+	ok = pruef.call("Hangar bauen", Meta.gebaeude_stufe("labor") == 1, "A auf Labor → Stufe %d" % Meta.gebaeude_stufe("labor")) and ok
+	_foto("station_hangar")
+	hangar.reiter_waehlen("module")
+	await _warte(0.5)
+	var kachel := hangar.find_child("Inventar", true, false).get_child(0) as Button
+	var idx: int = kachel.get_meta("modul_index")
+	kachel.grab_focus()
+	await _warte(0.2)
+	await _knopf_druck(JOY_BUTTON_X)
+	await _warte(0.3)
+	ok = pruef.call("Hangar aufwerten", int(Meta.module[idx].get("auf", 0)) == 1, "X auf %s" % Module.name_von(Meta.module[idx])) and ok
+	_foto("station_module")
+	for e in erg:
+		Protokoll.schreib("test", "Station: " + e)
+	Protokoll.schreib("test", "STATION-TEST %s" % ("BESTANDEN" if ok else "FEHLGESCHLAGEN"))
+	Meta.zuruecksetzen()
 
 
 ## Pakt: Sperre, Umschalten, jede Erschwernis im Spiel, Erzbonus, Meilensteine, Rekord, Hangar.

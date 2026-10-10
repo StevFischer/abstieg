@@ -82,7 +82,8 @@ static func erzeugen(rng: RandomNumberGenerator, tiefe: int, boss := false, p_pl
 
 static func name_von(m: Dictionary) -> String:
 	var p: Dictionary = PLAETZE[m.platz]
-	return "%s%s %s" % [SELTEN[m.selten].stamm, p.endung, p.name]
+	var auf := int(m.get("auf", 0))
+	return "%s%s %s%s" % [SELTEN[m.selten].stamm, p.endung, p.name, (" +%d" % auf) if auf > 0 else ""]
 
 
 static func farbe(m: Dictionary) -> Color:

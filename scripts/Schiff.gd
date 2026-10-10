@@ -65,6 +65,7 @@ var nachbrenner_cd := 0.0       ## Abklingzeit, 0 = kein Nachbrenner
 var nachbrenner_bereit := 0.0   ## Restzeit bis zum nächsten Nachbrenner
 var durchschlag_extra := 0      ## legendäre Laserlinse
 signal modul_gefunden(m: Dictionary)
+signal kristall_gefunden(menge: int)
 var _boost := 0.0
 ## Forschung (Meta.erforscht), beim Laufstart gesetzt
 var f := {}                     ## id -> true für erforschte Knoten
@@ -414,6 +415,8 @@ func _aufnehmen(art: String, menge: int) -> bool:
 			raketen = mini(raketen_max, raketen + menge)
 		"erz":
 			erz_gefunden.emit(menge)
+		"kristall":
+			kristall_gefunden.emit(menge)
 	return true
 
 

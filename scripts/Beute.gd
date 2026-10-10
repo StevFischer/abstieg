@@ -10,6 +10,7 @@ const ARTEN := {
 	"reparatur": {"farbe": Color(0.3, 1.0, 0.45), "menge": 30, "name": "HÜLLE"},
 	"rakete": {"farbe": Color(1.0, 0.3, 0.3), "menge": 2, "name": "RAKETEN"},
 	"modul": {"farbe": Color(0.75, 0.75, 0.75), "menge": 1, "name": "MODUL"},
+	"kristall": {"farbe": Color(0.75, 0.4, 1.0), "menge": 3, "name": "KRISTALLE"},
 }
 const SICHTWEITE := 30.0   ## ab hier erscheint das Namensschild
 
@@ -83,6 +84,10 @@ func _ready() -> void:
 			_teil(_box(Vector3(0.3, 1.0, 0.3)), Vector3.ZERO)
 			_teil(_box(Vector3(1.0, 0.3, 0.3)), Vector3.ZERO)
 			_teil(_box(Vector3(0.36, 0.36, 0.36)), Vector3.ZERO, _glanz)
+		"kristall":      # drei lange, schlanke Spitzen — anders als das gedrungene Erzbündel
+			for w in [Vector3(0, 0, 0), Vector3(0.35, 0, 0.2), Vector3(-0.3, 0, -0.25)]:
+				var k := _teil(_kristall(0.14, 1.4), Vector3(w.x * 0.6, 0.1, w.z * 0.6), _glanz if w == Vector3.ZERO else null)
+				k.rotation = Vector3(w.z * 0.6, randf() * TAU, -w.x * 0.6)
 		"modul":         # Kasten mit leuchtendem Rahmen in der Seltenheitsfarbe
 			_teil(_box(Vector3(0.7, 0.45, 0.7)), Vector3.ZERO)
 			for y in [-0.25, 0.25]:

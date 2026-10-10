@@ -185,6 +185,32 @@ static func zeichnen(ci: CanvasItem, r: Rect2, id: String, f: Color) -> void:
 				ci.draw_arc(m, s * (0.3 + 0.27 * k), 0, TAU, 24, Color(f, f.a * (1.0 - 0.25 * k)), dick * 0.4, true)
 			ci.draw_line(m, m + Vector2(s * 0.6, -s * 0.5), f, dick * 0.5)
 			ci.draw_circle(m + Vector2(-s * 0.35, s * 0.3), dick * 0.8, Color(1.0, 0.3, 0.25, f.a))
+		"auf_raffinerie":        # Schmelztiegel mit Schornstein und Rauch
+			ci.draw_colored_polygon(PackedVector2Array([m + Vector2(-0.7, 0.1) * s, m + Vector2(0.4, 0.1) * s,
+				m + Vector2(0.25, 0.85) * s, m + Vector2(-0.55, 0.85) * s]), Color(f, f.a * 0.6))
+			ci.draw_rect(Rect2(m + Vector2(0.45, -0.6) * s, Vector2(0.25, 1.45) * s), f)
+			for i in 3:
+				ci.draw_circle(m + Vector2(0.6 + 0.12 * i, -0.75 - 0.15 * i) * s, s * (0.1 + 0.04 * i), Color(f, f.a * (0.6 - 0.15 * i)))
+			ci.draw_line(m + Vector2(-0.6, 0.1) * s, m + Vector2(0.35, 0.1) * s, Color(1.0, 0.7, 0.3, f.a), dick * 0.8)
+		"auf_werkstatt":         # Schraubenschlüssel über Zahnrad
+			ci.draw_arc(m + Vector2(0, s * 0.15), s * 0.45, 0, TAU, 20, f, dick * 0.7, true)
+			for i in 8:
+				var d := Vector2(cos(TAU * i / 8.0), sin(TAU * i / 8.0))
+				ci.draw_line(m + Vector2(0, s * 0.15) + d * s * 0.45, m + Vector2(0, s * 0.15) + d * s * 0.65, f, dick * 0.7)
+			ci.draw_line(m + Vector2(-0.75, -0.75) * s, m + Vector2(0.1, 0.1) * s, Color(1, 1, 1, f.a * 0.85), dick)
+		"auf_labor":             # Kolben mit Flüssigkeit und Blasen
+			ci.draw_polyline(PackedVector2Array([m + Vector2(-0.18, -0.85) * s, m + Vector2(-0.18, -0.25) * s, m + Vector2(-0.65, 0.75) * s,
+				m + Vector2(0.65, 0.75) * s, m + Vector2(0.18, -0.25) * s, m + Vector2(0.18, -0.85) * s]), f, dick * 0.6, true)
+			ci.draw_colored_polygon(PackedVector2Array([m + Vector2(-0.45, 0.3) * s, m + Vector2(0.45, 0.3) * s,
+				m + Vector2(0.62, 0.72) * s, m + Vector2(-0.62, 0.72) * s]), Color(f, f.a * 0.7))
+			ci.draw_circle(m + Vector2(0.1, 0.05) * s, s * 0.07, f)
+			ci.draw_circle(m + Vector2(-0.05, -0.15) * s, s * 0.05, f)
+		"auf_lager":             # gestapelte Kisten
+			for p in [Vector2(-0.75, 0.1), Vector2(0.05, 0.1), Vector2(-0.35, -0.65)]:
+				var r2 := Rect2(m + p * s, Vector2(0.7, 0.7) * s)
+				ci.draw_rect(r2, Color(f, f.a * 0.35))
+				ci.draw_rect(r2, f, false, dick * 0.5)
+				ci.draw_line(r2.position, r2.end, Color(f, f.a * 0.6), dick * 0.35)
 		"mega":
 			var stern := PackedVector2Array()
 			for i in 16:

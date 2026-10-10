@@ -7,7 +7,7 @@ var _pfad := "user://abstieg_meta.cfg"
 ## Stev 2026-10-10: „viel mehr Aufwertungen für die Langzeitmotivation“ — Kampf, Überleben, Wirtschaft,
 ## Werkzeuge; endlose Meisterschaft; an Bosse gekoppelt; Reiter nach Art.
 const REITER := [["schiff", "Schiff"], ["kampf", "Kampf"], ["ueberleben", "Überleben"],
-	["wirtschaft", "Wirtschaft"], ["werkzeuge", "Werkzeuge"], ["forschung", "Forschung"], ["module", "Module"], ["pakt", "Pakt"]]
+	["wirtschaft", "Wirtschaft"], ["werkzeuge", "Werkzeuge"], ["forschung", "Forschung"], ["module", "Module"], ["pakt", "Pakt"], ["station", "Station"]]
 ## Forschungsbaum (Stev 2026-10-10: „ohne Scans einfach nur einen Forschungsbaum im Kaufmenü …
 ## Punkte dafür gibt es pro Stufe, die man maximal erreicht hat“; Inhalt: nur Freischaltungen und Boni).
 ## 1 Punkt je erreichter Rekordtiefe. "zeile"/"spalte": Platz im Baum, "vor": nötige Knoten.
@@ -43,6 +43,19 @@ const PAKT := [
 	{"id": "wut", "name": "Wütende Bosse", "text": "Bosse +50 % Leben, Phase 2 schon ab 70 %", "max": 1, "punkte": 2},
 ]
 const PAKT_MEILENSTEINE := [[5, 3], [10, 4]]     ## [Paktpunkte, Seltenheit des Belohnungsmoduls]
+## Bergbaustation (Stev 2026-10-10; Vorgabe: Erz bleibt Hauptwährung, Kristalle/Bauteile nur für Gebäude
+## und Modulverbesserung). Vier Gebäude, je drei Stufen; Kosten je Stufe [Erz, Kristalle, Bauteile].
+const GEBAEUDE := [
+	{"id": "raffinerie", "name": "Raffinerie", "text": "liefert nach jedem Lauf Erz: 25 / 60 / 120",
+		"kosten": [[300, 10, 5], [700, 25, 15], [1500, 50, 35]]},
+	{"id": "werkstatt", "name": "Werkstatt", "text": "Module aufwerten, +15 % je Mal: bis 1 / 2 / 3-mal",
+		"kosten": [[250, 15, 10], [600, 35, 25], [1300, 70, 50]]},
+	{"id": "labor", "name": "Labor", "text": "+2 Forschungspunkte je Stufe",
+		"kosten": [[400, 20, 10], [900, 45, 25], [1800, 90, 50]]},
+	{"id": "lager", "name": "Lager", "text": "+8 Inventarplätze für Module je Stufe",
+		"kosten": [[200, 10, 5], [450, 25, 12], [900, 50, 25]]},
+]
+const RAFFINERIE_ERTRAG := [0, 25, 60, 120]
 const AUFRUESTUNGEN := [
 	{"id": "schild", "art": "schiff", "name": "Schildgenerator", "text": "+25 Schild", "kosten": 40, "max": 8, "pro": 25.0, "meister": 5.0, "boss": 0},
 	{"id": "panzerung", "art": "schiff", "name": "Panzerung", "text": "+25 Hülle", "kosten": 40, "max": 8, "pro": 25.0, "meister": 5.0, "boss": 0},
@@ -75,6 +88,8 @@ var forschung: Array = []  ## erforschte Knoten-IDs
 var module: Array = []     ## Inventar: Modul-Dictionaries (siehe Module.gd)
 var eingebaut := {}        ## Steckplatz -> Modul
 var bauteile := 0          ## aus zerlegten Modulen; braucht später die Station
+var kristalle := 0         ## Rohstoff aus den Minen, für Gebäude und Modul-Aufwertungen
+var gebaeude := {}         ## Gebäude-ID -> Stufe
 var pakt := {}             ## Erschwernis-ID -> Stufe
 var pakt_rekord := {"punkte": 0, "tiefe": 0}
 var pakt_meilen: Array = []   ## schon erhaltene Meilensteine (Paktpunkte)
@@ -188,7 +203,7 @@ func wert(id: String) -> float:
 func modul_hinzu(m: Dictionary) -> Dictionary:
 	module.append(m)
 	var weg := {}
-	if module.size() > Module.INVENTAR_MAX:
+	if module.size() > inventar_max():
 		var schwach := 0
 		for i in module.size():
 			if Module.staerke(module[i]) < Module.staerke(module[schwach]):
@@ -225,6 +240,77 @@ func modul_zerlegen(index: int) -> int:
 	module.remove_at(index)
 	speichern()
 	return n
+
+
+# --- Station ------------------------------------------------------------------
+
+func gebaeude_def(id: String) -> Dictionary:
+	for g in GEBAEUDE:
+		if g.id == id:
+			return g
+	return {}
+
+
+func gebaeude_stufe(id: String) -> int:
+	return int(gebaeude.get(id, 0))
+
+
+## Kosten der nächsten Stufe [Erz, Kristalle, Bauteile]; leer, wenn ganz ausgebaut.
+func gebaeude_kosten(id: String) -> Array:
+	var st := gebaeude_stufe(id)
+	var k: Array = gebaeude_def(id).kosten
+	return [] if st >= k.size() else k[st]
+
+
+func ausbaubar(id: String) -> bool:
+	var k := gebaeude_kosten(id)
+	return not k.is_empty() and bank >= int(k[0]) and kristalle >= int(k[1]) and bauteile >= int(k[2])
+
+
+func ausbauen(id: String) -> bool:
+	if not ausbaubar(id):
+		return false
+	var k := gebaeude_kosten(id)
+	bank -= int(k[0])
+	kristalle -= int(k[1])
+	bauteile -= int(k[2])
+	gebaeude[id] = gebaeude_stufe(id) + 1
+	speichern()
+	Protokoll.schreib("meta", "Station: %s auf Stufe %d (−%d Erz, −%d Kristalle, −%d Bauteile)" % [id, gebaeude_stufe(id), k[0], k[1], k[2]])
+	return true
+
+
+func inventar_max() -> int:
+	return Module.INVENTAR_MAX + 8 * gebaeude_stufe("lager")
+
+
+func raffinerie_ertrag() -> int:
+	return RAFFINERIE_ERTRAG[gebaeude_stufe("raffinerie")]
+
+
+## Werkstatt: Modul (im Inventar oder eingebaut) um 15 % aufwerten. Kosten steigen je Aufwertung.
+func aufwert_kosten(m: Dictionary) -> Array:
+	var a := int(m.get("auf", 0))
+	return [5 * (a + 1) * (int(m.selten) + 1), 3 * (a + 1)]      # [Kristalle, Bauteile]
+
+
+func aufwertbar(m: Dictionary) -> bool:
+	var k := aufwert_kosten(m)
+	return int(m.get("auf", 0)) < gebaeude_stufe("werkstatt") and kristalle >= int(k[0]) and bauteile >= int(k[1])
+
+
+func modul_aufwerten(m: Dictionary) -> bool:
+	if not aufwertbar(m):
+		return false
+	var k := aufwert_kosten(m)
+	kristalle -= int(k[0])
+	bauteile -= int(k[1])
+	m["auf"] = int(m.get("auf", 0)) + 1
+	for e in m.eig:
+		e.wert = float(e.wert) * 1.15
+	speichern()
+	Protokoll.schreib("meta", "aufgewertet: %s auf +%d" % [Module.name_von(m), m.auf])
+	return true
 
 
 func pakt_def(id: String) -> Dictionary:
@@ -286,7 +372,7 @@ func erforscht(id: String) -> bool:
 
 ## Forschungspunkte: 1 je erreichter Rekordtiefe, abzüglich der ausgegebenen.
 func forschungspunkte_gesamt() -> int:
-	return rekord
+	return rekord + 2 * gebaeude_stufe("labor")      # Labor: +2 je Stufe
 
 
 func forschungspunkte_frei() -> int:
@@ -485,6 +571,8 @@ func zuruecksetzen() -> void:
 	pakt = {}
 	pakt_rekord = {"punkte": 0, "tiefe": 0}
 	pakt_meilen = []
+	kristalle = 0
+	gebaeude = {}
 	speichern()
 
 
@@ -504,6 +592,8 @@ func laden() -> void:
 	eingebaut = c.get_value("meta", "eingebaut", {})
 	bauteile = c.get_value("meta", "bauteile", 0)
 	pakt = c.get_value("meta", "pakt", {})
+	kristalle = c.get_value("meta", "kristalle", 0)
+	gebaeude = c.get_value("meta", "gebaeude", {})
 	pakt_rekord = c.get_value("meta", "pakt_rekord", {"punkte": 0, "tiefe": 0})
 	pakt_meilen = c.get_value("meta", "pakt_meilen", [])
 	spielzeit = c.get_value("meta", "spielzeit", 0.0)
@@ -549,6 +639,8 @@ func speichern() -> void:
 	c.set_value("meta", "eingebaut", eingebaut)
 	c.set_value("meta", "bauteile", bauteile)
 	c.set_value("meta", "pakt", pakt)
+	c.set_value("meta", "kristalle", kristalle)
+	c.set_value("meta", "gebaeude", gebaeude)
 	c.set_value("meta", "pakt_rekord", pakt_rekord)
 	c.set_value("meta", "pakt_meilen", pakt_meilen)
 	c.set_value("meta", "spielzeit", spielzeit)
