@@ -63,6 +63,8 @@ var erz_mult := 1.0
 var magnet := 0.0               ## Reichweite des Erzmagneten in m, 0 = keiner
 var nachbrenner_cd := 0.0       ## Abklingzeit, 0 = kein Nachbrenner
 var nachbrenner_bereit := 0.0   ## Restzeit bis zum nächsten Nachbrenner
+var durchschlag_extra := 0      ## legendäre Laserlinse
+signal modul_gefunden(m: Dictionary)
 var _boost := 0.0
 ## Forschung (Meta.erforscht), beim Laufstart gesetzt
 var f := {}                     ## id -> true für erforschte Knoten
@@ -115,6 +117,7 @@ func werte_setzen(w: Dictionary) -> void:
 	erz_mult = w.get("erz_mult", 1.0)
 	magnet = w.get("magnet", 0.0)
 	nachbrenner_cd = w.get("nachbrenner_cd", 0.0)
+	durchschlag_extra = w.get("durchschlag_extra", 0)
 	f = {}
 	for id in w.get("forschung", []):
 		f[id] = true
@@ -362,7 +365,7 @@ func _salve(w: Dictionary, start: Vector3, mult: float) -> Array:
 		var s: float = w.schaden * mult * (2.0 if krit > 0.0 and randf() < krit else 1.0)
 		var g := Geschoss.neu(start, r, w.tempo, s, true, w.farbe, 0.0, w.groesse * (0.85 + 0.15 * minf(mult, 2.2)))
 		if Waffen.ist_laser(w.id):
-			g.durchschlag = 1 if f.has("f_durchschlag") else 0
+			g.durchschlag = (1 if f.has("f_durchschlag") else 0) + durchschlag_extra
 			g.abprall = 1 if f.has("f_abprall") else 0
 			g.kette = f.has("f_kette")
 		welt.add_child(g)

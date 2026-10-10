@@ -313,10 +313,11 @@ func _jagen(dt: float) -> Vector3:
 	if tempo <= 0.0:
 		# Phantom: springt den Weg entlang, drei Zellen auf einmal
 		_spezial_t -= dt
-		# nicht direkt vors Schiff: mindestens zwei Zellen Weg bleiben stehen
-		if _spezial_t <= 0.0 and _jagd_weg.size() > 2:
+		# nicht direkt vors Schiff: zwei Zellen Weg bleiben stehen. Ist der Rest kürzer (das Schiff steckt
+		# gleich hinter einer Ecke), auf die Zelle davor — sonst sähe es das Schiff nie (Fehler 14:38).
+		if _spezial_t <= 0.0 and not _jagd_weg.is_empty():
 			_spezial_t = 1.5
-			_springen(_jagd_weg[mini(2, _jagd_weg.size() - 3)])
+			_springen(_jagd_weg[mini(2, _jagd_weg.size() - 3)] if _jagd_weg.size() > 2 else _jagd_weg[0])
 			_jagd_t = 0.0
 		return Vector3.ZERO
 	return (hin - global_position).normalized() * JAGD_TEMPO

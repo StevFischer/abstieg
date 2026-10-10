@@ -107,6 +107,9 @@ func _starte_lauf() -> void:
 	schiff.gestorben.connect(func(): _schiff_tot("Schiff zerstört"))
 	schiff.getroffen.connect(func(s: float): hud.blitz(s))
 	schiff.erz_gefunden.connect(func(m: int): level_erz += m)
+	schiff.modul_gefunden.connect(func(m: Dictionary):
+		var weg := Meta.modul_hinzu(m)
+		hud.aufnahme(Module.name_von(m).to_upper() + ("  (Inventar voll: %s zerlegt)" % Module.name_von(weg) if not weg.is_empty() else ""), Module.farbe(m)))
 	schiff.notschild_ausgeloest.connect(func():
 		hud.mitteilung("NOTSCHILD!", 1.8, HUD.BLAU)
 		Protokoll.schreib("lauf", "Notschild ausgelöst auf Tiefe %d, übrig %d" % [tiefe, schiff.notschild]))
@@ -320,7 +323,7 @@ func _umgebung_setzen() -> void:
 	e.background_color = thema.nebel
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	e.ambient_light_color = thema.umgebung
-	e.ambient_light_energy = 0.35
+	e.ambient_light_energy = float(thema.get("umgebung_kraft", 0.35))
 	e.fog_enabled = true
 	e.fog_light_color = thema.nebel
 	e.fog_density = 0.012
@@ -328,6 +331,17 @@ func _umgebung_setzen() -> void:
 	e.glow_intensity = 0.4          # Stev: Leuchteffekte waren übertrieben hell (vorher 0.7 / 0.9)
 	e.glow_hdr_threshold = 1.1
 	e.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+
+
+const MODUL_CHANCE := 0.05     ## je normalem Gegner; Bosse immer (mindestens Selten), Reaktor 30 %
+
+
+func _modul_fallen(pos: Vector3, boss: bool) -> Beute:
+	var b := Beute.neu("modul", pos)
+	b.modul = Module.erzeugen(_rng, tiefe, boss)
+	level.add_child.call_deferred(b)
+	Protokoll.schreib("level", "Modul fällt: %s auf Tiefe %d" % [Module.name_von(b.modul), tiefe])
+	return b
 
 
 ## Schatzsucher: Bosse lassen doppelt so viel Erz fallen.
@@ -342,6 +356,10 @@ func _gegner_weg(g: Gegner) -> void:
 		level.add_child.call_deferred(Beute.neu("erz", g.global_position, g.erz))
 	if g.beute > 0:
 		level.add_child.call_deferred(Beute.neu("erz", g.global_position + Vector3(0, 0.8, 0), g.beute))
+	if g.ist_boss:
+		_modul_fallen(g.global_position + Vector3(0, 1.5, 0), true)
+	elif _rng.randf() < MODUL_CHANCE:
+		_modul_fallen(g.global_position + Vector3(0, 0.6, 0), false)
 	if g.ist_boss:
 		for i in 8:     # Bossbeute: ein Kranz aus Erz
 			var p := g.global_position + Vector3(cos(TAU * i / 8.0), 0.3 * (i % 2), sin(TAU * i / 8.0)) * 2.5
@@ -373,6 +391,8 @@ func _reaktor_weg() -> void:
 		if countdown >= 0.0:
 			klang.spiele("sirene", null, -13.0))
 	level_erz += 10 + 5 * tiefe
+	if _rng.randf() < 0.3:
+		_modul_fallen(reaktor.global_position + Vector3(0, 3.0, 0), false)
 	ausgang.oeffnen()
 	hud.mitteilung("REAKTOR ZERSTÖRT", 2.0, HUD.ROT)
 	Protokoll.schreib("level", "Reaktor zerstört auf Tiefe %d, Fluchtzeit %.0f s" % [tiefe, countdown])
@@ -698,6 +718,10 @@ func _autotest() -> void:
 		return
 	if "--zeige-gegner" in OS.get_cmdline_user_args():
 		await _gegner_schau()
+		get_tree().quit(0)
+		return
+	if "--module-test" in OS.get_cmdline_user_args():
+		await _module_test()
 		get_tree().quit(0)
 		return
 	if "--forschung-test" in OS.get_cmdline_user_args():
@@ -1667,6 +1691,150 @@ func _aufwertungs_test() -> void:
 		Protokoll.schreib("test", "Aufwertung: " + e)
 	Protokoll.schreib("test", "AUFWERTUNGS-TEST %s" % ("BESTANDEN" if ok else "FEHLGESCHLAGEN"))
 	Meta.zuruecksetzen()     # Teststände nicht in den nächsten Test mitnehmen (gemeinsamer Autotest-Spielstand)
+
+
+## Module: Verteilung, Einbauen/Tauschen/Zerlegen, volles Inventar, Wirkung, Boss-Drop, Aufsammeln, Hangar.
+func _module_test() -> void:
+	var erg: Array[String] = []
+	var ok := true
+	var pruef := func(name: String, gut: bool, text: String):
+		erg.append("%s %s: %s" % ["ok  " if gut else "FEHL", name, text])
+		return gut
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var zahl := [0, 0, 0, 0, 0]
+	var form_ok := true
+	for i in 3000:
+		var m := Module.erzeugen(rng, 10)
+		zahl[m.selten] += 1
+		form_ok = form_ok and m.eig.size() == mini(int(Module.SELTEN[m.selten].eig), 4) and (m.spezial != "") == (m.selten == 4)
+		for e in m.eig:
+			form_ok = form_ok and m.platz in Module.EIG[e.id].plaetze
+	ok = pruef.call("Verteilung", zahl[0] > zahl[1] and zahl[1] > zahl[2] and zahl[2] > zahl[3] and zahl[3] > zahl[4] and zahl[4] > 0,
+		"3000 Funde: gewöhnlich %d, ungewöhnlich %d, selten %d, episch %d, legendär %d" % zahl) and ok
+	ok = pruef.call("Aufbau", form_ok, "Eigenschaften passen zu Platz und Seltenheit, Spezial nur bei legendär") and ok
+	var boss_min := 4
+	for i in 300:
+		boss_min = mini(boss_min, Module.erzeugen(rng, 10, true).selten)
+	ok = pruef.call("Bossbeute", boss_min >= 2, "300 Bossfunde, schlechteste Seltenheit %s" % Module.SELTEN[boss_min].name) and ok
+	# Einbauen, Tauschen, Zerlegen
+	Meta.zuruecksetzen()
+	var L := {"platz": "laser", "selten": 4, "stufe": 10, "eig": [{"id": "laser_mult", "wert": 0.2}, {"id": "feuerrate", "wert": 0.1}, {"id": "krit", "wert": 0.05}], "spezial": "durchschlag"}
+	var S := {"platz": "schild", "selten": 3, "stufe": 10, "eig": [{"id": "schild_max", "wert": 20.0}, {"id": "schild_laden", "wert": 0.3}, {"id": "huelle_max", "wert": 15.0}], "spezial": ""}
+	var T := {"platz": "triebwerk", "selten": 4, "stufe": 10, "eig": [{"id": "tempo", "wert": 0.1}], "spezial": "sprint"}
+	var R := {"platz": "rumpf", "selten": 4, "stufe": 10, "eig": [{"id": "raketen", "wert": 2.0}, {"id": "erz_mult", "wert": 0.2}], "spezial": "magnet"}
+	for m in [L, S, T, R]:
+		Meta.modul_hinzu(m)
+	for i in 4:
+		Meta.modul_einbauen(0)
+	ok = pruef.call("Einbauen", Meta.eingebaut.size() == 4 and Meta.module.is_empty(), "4 Plätze belegt, Inventar %d" % Meta.module.size()) and ok
+	var L2 := {"platz": "laser", "selten": 0, "stufe": 1, "eig": [{"id": "krit", "wert": 0.02}], "spezial": ""}
+	Meta.modul_hinzu(L2)
+	Meta.modul_einbauen(0)
+	var getauscht: bool = Meta.eingebaut.laser.selten == 0 and Meta.module.size() == 1 and Meta.module[0].selten == 4
+	Meta.modul_einbauen(0)
+	ok = pruef.call("Tauschen", getauscht and Meta.eingebaut.laser.selten == 4 and Meta.module[0].selten == 0, "Laserlinsen getauscht und zurück") and ok
+	var bt := Meta.bauteile
+	Meta.modul_zerlegen(0)
+	ok = pruef.call("Zerlegen", Meta.bauteile - bt == 1 and Meta.module.is_empty(), "gewöhnliche Linse T1 → +%d Bauteile" % (Meta.bauteile - bt)) and ok
+	for i in Module.INVENTAR_MAX + 1:
+		Meta.modul_hinzu(Module.erzeugen(rng, 3))
+	ok = pruef.call("Inventar voll", Meta.module.size() == Module.INVENTAR_MAX, "%d Funde → Inventar %d, Bauteile %d" % [Module.INVENTAR_MAX + 1, Meta.module.size(), Meta.bauteile]) and ok
+	Meta.module = []
+	Meta.laden()
+	ok = pruef.call("Gespeichert", Meta.eingebaut.size() == 4 and Meta.module.size() == Module.INVENTAR_MAX, "nach Neuladen %d eingebaut, %d im Inventar" % [Meta.eingebaut.size(), Meta.module.size()]) and ok
+	# Wirkung
+	var w := Meta.schiffswerte()
+	var soll := {"schild_max": 70.0, "huelle_max": 115.0, "tempo": 14.0 * 1.1 * 1.12, "raketen_max": 6, "laser_mult": 1.2, "feuerrate": 1.1,
+		"krit": 0.05, "schild_laden": 1.3, "erz_mult": 1.2, "magnet": 4.0, "durchschlag_extra": 1}
+	var falsch := []
+	for k in soll:
+		if not is_equal_approx(float(w[k]), float(soll[k])):
+			falsch.append("%s %s≠%s" % [k, w[k], soll[k]])
+	ok = pruef.call("Schiffswerte", falsch.is_empty(), "alle 11 Werte stimmen" if falsch.is_empty() else str(falsch)) and ok
+	Meta.start_tiefe = 1
+	_starte_lauf()
+	await _warte(1.0)
+	for g in get_tree().get_nodes_in_group("gegner"):
+		g.free()
+	for b in get_tree().get_nodes_in_group("beute"):
+		b.free()
+	schiff.unverwundbar = true
+	schiff.krit = 0.0
+	schiff.laser_wahl = "zwilling"
+	schiff.laser_schuss()
+	var bolzen: Geschoss = null
+	for k in level.get_children():
+		if k is Geschoss and k.vom_spieler:
+			bolzen = k
+	ok = pruef.call("Im Schiff", bolzen != null and bolzen.durchschlag == 1 and is_equal_approx(bolzen.schaden, 12.0 * 1.2) and is_equal_approx(schiff.magnet, 4.0),
+		"Bolzen %.1f Schaden, Durchschlag %d, Magnet %.0f m, Schild %.0f, Tempo %.2f" % [bolzen.schaden if bolzen else 0.0, bolzen.durchschlag if bolzen else -1, schiff.magnet, schiff.schild_max, schiff.tempo]) and ok
+	# Funde im Bergwerk: eine Reihe aller Seltenheiten für das Bild
+	var vor := -schiff.global_basis.z
+	for i in 5:
+		var mb := Beute.neu("modul", schiff.global_position + vor * (8.0 + 4.0 * (i % 2)) + schiff.global_basis.x * (i - 2) * 3.2 + Vector3(0, (i % 2) * 1.5 - 0.8, 0))
+		mb.modul = Module.erzeugen(rng, 5, false, Module.PLATZ_REIHE[i % 4])
+		mb.modul.selten = i
+		level.add_child(mb)
+	await _warte(0.8)
+	_foto("module_funde")
+	for b in get_tree().get_nodes_in_group("beute"):
+		b.free()
+	schiff.magnet = 0.0
+	# Boss-Drop und Aufsammeln
+	tiefe = 5
+	_lade_level()
+	await _warte(1.0)
+	var bs := boss
+	for g in get_tree().get_nodes_in_group("gegner"):
+		if g != bs:
+			g.free()
+	for b in get_tree().get_nodes_in_group("beute"):
+		b.free()
+	var inv0 := Meta.module.size()
+	Meta.module = Meta.module.slice(0, 10)
+	inv0 = Meta.module.size()
+	_gegner_weg(bs)
+	await _warte(0.3)
+	var drop: Beute = null
+	for b in get_tree().get_nodes_in_group("beute"):
+		if b.art == "modul":
+			drop = b
+	ok = pruef.call("Boss-Drop", drop != null and int(drop.modul.selten) >= 2, "Boss lässt fallen: %s" % (Module.name_von(drop.modul) if drop else "nichts")) and ok
+	if drop:
+		schiff.global_position = drop.global_position + Vector3(0, 0, 1.0)
+		await _warte(0.5)
+	ok = pruef.call("Aufsammeln", Meta.module.size() == inv0 + 1, "Inventar %d → %d" % [inv0, Meta.module.size()]) and ok
+	# Hangar: Reiter Module, Controller A baut ein, Y zerlegt
+	_zeige_hangar()
+	hangar.reiter_waehlen("module")
+	await _warte(0.6)
+	_foto("module_hangar")
+	var kacheln := []
+	for k in hangar.find_child("Inventar", true, false).get_children():
+		kacheln.append(k)
+	var k0: Button = kacheln[0]
+	var idx0: int = k0.get_meta("modul_index")
+	var platz0: String = Meta.module[idx0].platz
+	var neu_m: Dictionary = Meta.module[idx0]
+	k0.grab_focus()
+	await _warte(0.2)
+	await _knopf_druck(JOY_BUTTON_A)
+	await _warte(0.3)
+	ok = pruef.call("Hangar A", Meta.eingebaut[platz0] == neu_m, "A auf %s → eingebaut" % Module.name_von(neu_m)) and ok
+	var k1 := hangar.find_child("Inventar", true, false).get_child(0) as Button
+	k1.grab_focus()
+	var bt0 := Meta.bauteile
+	var n0 := Meta.module.size()
+	await _warte(0.2)
+	await _knopf_druck(JOY_BUTTON_Y)
+	await _warte(0.3)
+	ok = pruef.call("Hangar Y", Meta.module.size() == n0 - 1 and Meta.bauteile > bt0, "Y zerlegt: Inventar %d → %d, Bauteile %d → %d" % [n0, Meta.module.size(), bt0, Meta.bauteile]) and ok
+	_foto("module_hangar_danach")
+	for e in erg:
+		Protokoll.schreib("test", "Module: " + e)
+	Protokoll.schreib("test", "MODULE-TEST %s" % ("BESTANDEN" if ok else "FEHLGESCHLAGEN"))
+	Meta.zuruecksetzen()
 
 
 ## Forschungsbaum: Punkte, Reihenfolge, Querverbindungen, jede Wirkung im Spiel, Hangar-Bild.

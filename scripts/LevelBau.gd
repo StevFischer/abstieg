@@ -168,7 +168,7 @@ static func _lichter(mine: Node3D, gen: LevelGen, thema: Dictionary, rng: Random
 			var l := OmniLight3D.new()
 			l.light_color = farbe
 			l.omni_range = reichweite + r.groesse.y * s * 0.3
-			l.light_energy = 1.7
+			l.light_energy = 1.7 * float(thema.get("licht", 1.0))
 			l.omni_attenuation = 0.8
 			l.position = unter_decke - Vector3(0, s * 0.25, 0)
 			l.add_to_group("minenlicht")
@@ -190,7 +190,7 @@ static func _lichter(mine: Node3D, gen: LevelGen, thema: Dictionary, rng: Random
 			var tl := OmniLight3D.new()
 			tl.light_color = farbe.lerp(Color.WHITE, 0.2)
 			tl.omni_range = 10.0
-			tl.light_energy = 0.9
+			tl.light_energy = 0.9 * float(thema.get("licht", 1.0))
 			tl.position = LevelGen.welt_von(weg[j]) + Vector3(0, s * 0.3, 0)
 			tl.add_to_group("minenlicht")
 			tl.set_meta("farbe", tl.light_color)

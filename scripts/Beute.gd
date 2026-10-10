@@ -9,10 +9,12 @@ const ARTEN := {
 	"schild": {"farbe": Color(0.3, 0.6, 1.0), "menge": 25, "name": "SCHILD"},
 	"reparatur": {"farbe": Color(0.3, 1.0, 0.45), "menge": 30, "name": "HÜLLE"},
 	"rakete": {"farbe": Color(1.0, 0.3, 0.3), "menge": 2, "name": "RAKETEN"},
+	"modul": {"farbe": Color(0.75, 0.75, 0.75), "menge": 1, "name": "MODUL"},
 }
 const SICHTWEITE := 30.0   ## ab hier erscheint das Namensschild
 
 var art := "erz"
+var modul := {}     ## nur bei art "modul": das Modul selbst (Module.gd)
 var menge := 5
 var _t := 0.0
 var _form: Node3D
@@ -46,7 +48,7 @@ func _ready() -> void:
 	kugel.radius = SAMMEL_RADIUS
 	form.shape = kugel
 	add_child(form)
-	var farbe: Color = ARTEN[art].farbe
+	var farbe: Color = Module.farbe(modul) if art == "modul" else ARTEN[art].farbe
 	_mat = StandardMaterial3D.new()
 	_mat.albedo_color = farbe
 	_mat.metallic = 0.4
@@ -81,6 +83,11 @@ func _ready() -> void:
 			_teil(_box(Vector3(0.3, 1.0, 0.3)), Vector3.ZERO)
 			_teil(_box(Vector3(1.0, 0.3, 0.3)), Vector3.ZERO)
 			_teil(_box(Vector3(0.36, 0.36, 0.36)), Vector3.ZERO, _glanz)
+		"modul":         # Kasten mit leuchtendem Rahmen in der Seltenheitsfarbe
+			_teil(_box(Vector3(0.7, 0.45, 0.7)), Vector3.ZERO)
+			for y in [-0.25, 0.25]:
+				_teil(_box(Vector3(0.82, 0.07, 0.82)), Vector3(0, y, 0), _glanz)
+			_teil(_box(Vector3(0.2, 0.2, 0.86)), Vector3.ZERO, _glanz)
 		"rakete":
 			for x in [-0.22, 0.22]:
 				var rumpf := CylinderMesh.new()
@@ -97,7 +104,7 @@ func _ready() -> void:
 	_form.scale = Vector3.ONE * 1.3
 
 	var schild := Label3D.new()
-	schild.text = beschriftung(art, menge)
+	schild.text = Module.name_von(modul) if art == "modul" else beschriftung(art, menge)
 	schild.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	schild.font_size = 40
 	schild.outline_size = 12
@@ -153,5 +160,10 @@ func _process(dt: float) -> void:
 
 
 func _rein(k: Node3D) -> void:
+	if art == "modul":
+		if k is Schiff:
+			k.modul_gefunden.emit(modul)
+			queue_free()
+		return
 	if k.has_method("aufnehmen") and k.aufnehmen(art, menge):
 		queue_free()

@@ -8,7 +8,7 @@ signal optionen
 
 const ORANGE := Color(1.0, 0.6, 0.2)
 const ART_FARBE := {"kampf": Color(1.0, 0.35, 0.3), "ueberleben": Color(0.4, 0.75, 1.0),
-	"wirtschaft": Color(1.0, 0.82, 0.3), "werkzeuge": Color(0.35, 0.95, 0.85), "forschung": Color(0.75, 0.55, 1.0)}
+	"wirtschaft": Color(1.0, 0.82, 0.3), "werkzeuge": Color(0.35, 0.95, 0.85), "forschung": Color(0.75, 0.55, 1.0), "module": Color(1.0, 0.6, 0.15)}
 const ZWEIG_FARBE := {"Waffen": Color(1.0, 0.35, 0.3), "Schiff": Color(0.4, 0.75, 1.0),
 	"Bergbau": Color(1.0, 0.82, 0.3), "Taktik": Color(0.35, 0.95, 0.85)}
 
@@ -83,10 +83,13 @@ func aufbauen() -> void:
 	for a in Meta.AUFRUESTUNGEN:
 		if a.art == _reiter:
 			raster.add_child(_aufruestkarte(a))
-	if _reiter == "forschung":
+	if _reiter == "forschung" or _reiter == "module":
 		links.remove_child(raster)
 		raster.queue_free()
-		_forschungsbaum(links)
+		if _reiter == "forschung":
+			_forschungsbaum(links)
+		else:
+			_module_ansicht(links)
 	_info = _label("Steuerkreuz/Maus auf eine Karte: Name und Werte erscheinen hier.", 17, Color(0.7, 0.68, 0.6), true)
 	_info.custom_minimum_size = Vector2(0, 52)
 	_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -198,6 +201,9 @@ func _reiter_zeile(links: VBoxContainer) -> void:
 				frei = frei or Meta.freigeschaltet(a.id)
 				if Meta.kaufbar(a.id):
 					neu += 1
+		if id == "module":
+			frei = true
+			neu = Meta.module.size()
 		if id == "forschung":
 			frei = true
 			for k in Meta.FORSCHUNG:
@@ -211,7 +217,7 @@ func _reiter_zeile(links: VBoxContainer) -> void:
 		b.button_pressed = id == _reiter
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.custom_minimum_size = Vector2(0, 36)
-		b.add_theme_font_size_override("font_size", 15)
+		b.add_theme_font_size_override("font_size", 14)
 		var farbe: Color = ART_FARBE.get(id, ORANGE)
 		var gedrueckt := StyleBoxFlat.new()
 		gedrueckt.bg_color = Color(farbe.r * 0.22, farbe.g * 0.22, farbe.b * 0.22)
@@ -295,6 +301,115 @@ func _forschungsbaum(links: VBoxContainer) -> void:
 		flaeche.add_child(b)
 
 
+## Module: oben die vier Steckplätze, darunter das Inventar (nach Platz und Seltenheit sortiert).
+## A/Klick baut ein (das alte geht ins Inventar), Y/Rechtsklick zerlegt zu Bauteilen.
+func _module_ansicht(links: VBoxContainer) -> void:
+	var kopf := HBoxContainer.new()
+	kopf.add_theme_constant_override("separation", 16)
+	links.add_child(kopf)
+	var info := _label("Bauteile: %d   ·   Inventar %d/%d   ·   A/Klick einbauen · Y/Rechtsklick zerlegen" % [
+		Meta.bauteile, Meta.module.size(), Module.INVENTAR_MAX], 15, ART_FARBE.module, false)
+	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	kopf.add_child(info)
+	var alle := Button.new()
+	alle.name = "ZerlegeGewoehnliche"
+	alle.text = "Gewöhnliche zerlegen"
+	alle.add_theme_font_size_override("font_size", 14)
+	var gewoehnliche_zerlegen := func() -> bool:
+		for i in range(Meta.module.size() - 1, -1, -1):
+			if int(Meta.module[i].selten) == 0:
+				Meta.modul_zerlegen(i)
+		return true
+	_knopf(alle, true, "Alle grauen Module im Inventar zu Bauteilen zerlegen", gewoehnliche_zerlegen, "")
+	kopf.add_child(alle)
+	# Steckplätze
+	var plaetze := HBoxContainer.new()
+	plaetze.add_theme_constant_override("separation", 8)
+	links.add_child(plaetze)
+	for platz in Module.PLATZ_REIHE:
+		var m: Dictionary = Meta.eingebaut.get(platz, {})
+		var leer := m.is_empty()
+		var farbe: Color = Color(0.4, 0.4, 0.4) if leer else Module.farbe(m)
+		var b := Button.new()
+		b.name = "Platz_" + platz
+		b.custom_minimum_size = Vector2(0, 70)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.add_theme_font_size_override("font_size", 13)
+		b.vertical_icon_alignment = VERTICAL_ALIGNMENT_BOTTOM
+		b.text = "\n\n\n" + (("leer · " + Module.PLAETZE[platz].name) if leer else Module.name_von(m))
+		b.add_theme_stylebox_override("normal", _modul_stil(farbe, not leer))
+		b.add_theme_stylebox_override("hover", _modul_stil(Color.WHITE, not leer))
+		b.add_theme_stylebox_override("focus", _modul_stil(Color.WHITE, not leer))
+		b.add_theme_color_override("font_color", farbe.lerp(Color.WHITE, 0.3))
+		var sym := WaffenSymbol.new(Module.PLAETZE[platz].symbol, farbe)
+		sym.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		sym.offset_top = 4
+		sym.offset_bottom = -30      # oberer Teil des Knopfs, darunter steht der Name
+		b.add_child(sym)
+		var tip := ("Steckplatz %s: leer — Module fallen von Gegnern (Bosse immer)" % Module.PLAETZE[platz].name) if leer else "Eingebaut: " + Module.beschreibung(m)
+		b.tooltip_text = tip
+		_knopf(b, not leer, tip, func(): return false, tip)
+		plaetze.add_child(b)
+	# Inventar
+	var reihe := []
+	for i in Meta.module.size():
+		reihe.append(i)
+	reihe.sort_custom(func(a, b):
+		var ma: Dictionary = Meta.module[a]
+		var mb: Dictionary = Meta.module[b]
+		var pa := Module.PLATZ_REIHE.find(ma.platz)
+		var pb := Module.PLATZ_REIHE.find(mb.platz)
+		return pa < pb if pa != pb else int(ma.selten) > int(mb.selten))
+	var gitter := GridContainer.new()
+	gitter.name = "Inventar"
+	gitter.columns = 6
+	gitter.add_theme_constant_override("h_separation", 6)
+	gitter.add_theme_constant_override("v_separation", 6)
+	links.add_child(gitter)
+	if reihe.is_empty():
+		links.add_child(_label("Noch keine Module. Sie fallen von Gegnern (5 %), vom Reaktor (30 %) und von jedem Boss.", 15, Color(0.6, 0.58, 0.52), false))
+	for i in reihe:
+		var m: Dictionary = Meta.module[i]
+		var b := Button.new()
+		b.name = "Modul_%d" % i
+		b.set_meta("modul_index", i)
+		b.custom_minimum_size = Vector2(112, 36)
+		b.add_theme_font_size_override("font_size", 12)
+		b.text = "%s · T%d" % [Module.PLAETZE[m.platz].name, m.stufe]
+		var farbe := Module.farbe(m)
+		b.add_theme_stylebox_override("normal", _modul_stil(farbe, false))
+		b.add_theme_stylebox_override("hover", _modul_stil(Color.WHITE, false))
+		b.add_theme_stylebox_override("focus", _modul_stil(Color.WHITE, false))
+		b.add_theme_color_override("font_color", farbe)
+		var alt: Dictionary = Meta.eingebaut.get(m.platz, {})
+		# Zwei Zeilen fürs Infofeld: Name + was es ersetzt, dann die Eigenschaften und der Zerlegewert
+		var tip := "%s   ·   ersetzt: %s\n%s   ·   zerlegen +%d Bauteile" % [Module.beschreibung(m).get_slice("\n", 0),
+			Module.name_von(alt) if not alt.is_empty() else "nichts", Module.beschreibung(m).get_slice("\n", 1), Module.bauteile_wert(m)]
+		b.tooltip_text = tip
+		var idx: int = i
+		_knopf(b, true, tip, func(): return Meta.modul_einbauen(idx), "")
+		b.gui_input.connect(func(e: InputEvent):
+			if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_RIGHT:
+				modul_zerlegen_knopf(idx))
+		gitter.add_child(b)
+
+
+func _modul_stil(farbe: Color, gefuellt: bool) -> StyleBoxFlat:
+	var st := StyleBoxFlat.new()
+	st.bg_color = Color(farbe.r * 0.2, farbe.g * 0.2, farbe.b * 0.2) if gefuellt else Color(0.06, 0.055, 0.05)
+	st.border_color = farbe
+	st.set_border_width_all(2)
+	st.set_corner_radius_all(5)
+	st.set_content_margin_all(4)
+	return st
+
+
+func modul_zerlegen_knopf(index: int) -> void:
+	Meta.modul_zerlegen(index)
+	_fokus_merken = "Modul_%d" % mini(index, Meta.module.size() - 1)
+	aufbauen()
+
+
 func reiter_waehlen(id: String) -> void:
 	if id == _reiter:
 		return
@@ -311,6 +426,13 @@ func _unhandled_input(e: InputEvent) -> void:
 		schritt = 1
 	elif e.is_action_pressed("rollen_links"):
 		schritt = -1
+	# Y auf einem Inventar-Modul: zerlegen
+	if e.is_action_pressed("licht"):
+		var f := get_viewport().gui_get_focus_owner()
+		if f != null and f.has_meta("modul_index"):
+			modul_zerlegen_knopf(int(f.get_meta("modul_index")))
+			get_viewport().set_input_as_handled()
+		return
 	if schritt == 0:
 		return
 	var ids: Array = Meta.REITER.map(func(r): return r[0])

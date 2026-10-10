@@ -7,7 +7,7 @@ var _pfad := "user://abstieg_meta.cfg"
 ## Stev 2026-10-10: „viel mehr Aufwertungen für die Langzeitmotivation“ — Kampf, Überleben, Wirtschaft,
 ## Werkzeuge; endlose Meisterschaft; an Bosse gekoppelt; Reiter nach Art.
 const REITER := [["schiff", "Schiff"], ["kampf", "Kampf"], ["ueberleben", "Überleben"],
-	["wirtschaft", "Wirtschaft"], ["werkzeuge", "Werkzeuge"], ["forschung", "Forschung"]]
+	["wirtschaft", "Wirtschaft"], ["werkzeuge", "Werkzeuge"], ["forschung", "Forschung"], ["module", "Module"]]
 ## Forschungsbaum (Stev 2026-10-10: „ohne Scans einfach nur einen Forschungsbaum im Kaufmenü …
 ## Punkte dafür gibt es pro Stufe, die man maximal erreicht hat“; Inhalt: nur Freischaltungen und Boni).
 ## 1 Punkt je erreichter Rekordtiefe. "zeile"/"spalte": Platz im Baum, "vor": nötige Knoten.
@@ -58,6 +58,9 @@ var laeufe := 0
 var stufen := {}
 var waffen: Array = []     ## freigeschaltete Waffen-IDs, zusätzlich zu Waffen.START
 var forschung: Array = []  ## erforschte Knoten-IDs
+var module: Array = []     ## Inventar: Modul-Dictionaries (siehe Module.gd)
+var eingebaut := {}        ## Steckplatz -> Modul
+var bauteile := 0          ## aus zerlegten Modulen; braucht später die Station
 var waffen_stufen := {}    ## Version je Waffe (1 = Mk I); fehlt ein Eintrag, ist es Mk I
 ## Spielzeit wie bei Steam: Zeit, in der das Spiel offen ist (auch Hangar/Pause). Übersteht „Neues Spiel“.
 var spielzeit := 0.0       ## Sekunden insgesamt
@@ -161,6 +164,50 @@ func hat_meisterschaft(id: String) -> bool:
 func wert(id: String) -> float:
 	var a := _def(id)
 	return mini(stufe(id), int(a.max)) * float(a.pro) + meisterstufe(id) * float(a.meister)
+
+
+## Gefundenes Modul ins Inventar; ist es voll, wird das schwächste (auch das neue) zu Bauteilen zerlegt.
+## Gibt zurück, was zerlegt wurde (leer, wenn nichts).
+func modul_hinzu(m: Dictionary) -> Dictionary:
+	module.append(m)
+	var weg := {}
+	if module.size() > Module.INVENTAR_MAX:
+		var schwach := 0
+		for i in module.size():
+			if Module.staerke(module[i]) < Module.staerke(module[schwach]):
+				schwach = i
+		weg = module[schwach]
+		bauteile += Module.bauteile_wert(weg)
+		module.remove_at(schwach)
+		Protokoll.schreib("meta", "Inventar voll: %s zerlegt" % Module.name_von(weg))
+	speichern()
+	Protokoll.schreib("meta", "Modul gefunden: %s — %s" % [Module.name_von(m), Module.beschreibung(m).get_slice("\n", 1)])
+	return weg
+
+
+## Modul aus dem Inventar einbauen; ein vorher eingebautes geht ins Inventar zurück.
+func modul_einbauen(index: int) -> bool:
+	if index < 0 or index >= module.size():
+		return false
+	var m: Dictionary = module[index]
+	module.remove_at(index)
+	if eingebaut.has(m.platz):
+		module.append(eingebaut[m.platz])
+	eingebaut[m.platz] = m
+	speichern()
+	Protokoll.schreib("meta", "eingebaut: %s" % Module.name_von(m))
+	return true
+
+
+func modul_zerlegen(index: int) -> int:
+	if index < 0 or index >= module.size():
+		return 0
+	var n := Module.bauteile_wert(module[index])
+	bauteile += n
+	Protokoll.schreib("meta", "zerlegt: %s → +%d Bauteile" % [Module.name_von(module[index]), n])
+	module.remove_at(index)
+	speichern()
+	return n
 
 
 func forschung_def(id: String) -> Dictionary:
@@ -295,7 +342,7 @@ func waffe_verbessern(id: String) -> bool:
 
 
 func schiffswerte() -> Dictionary:
-	return {
+	var werte := {
 		"schild_max": 50.0 + wert("schild") + (15.0 if erforscht("s_spulen") else 0.0),
 		"huelle_max": 100.0 + wert("panzerung"),
 		"tempo": 14.0 * (1.0 + wert("triebwerk")) * (1.06 if erforscht("s_daempfer") else 1.0),
@@ -317,6 +364,28 @@ func schiffswerte() -> Dictionary:
 		"radar": 0.0 if stufe("radar") == 0 else 25.0 + 10.0 * (stufe("radar") - 1),
 		"forschung": forschung.duplicate(),
 	}
+	return _module_anwenden(werte)
+
+
+## Eingebaute Module auf die Schiffswerte rechnen.
+func _module_anwenden(w: Dictionary) -> Dictionary:
+	var m := Module.wirkung(eingebaut)
+	w.schild_max += m.get("schild_max", 0.0)
+	w.huelle_max += m.get("huelle_max", 0.0)
+	w.tempo *= (1.0 + m.get("tempo", 0.0)) * (1.12 if m.has("spezial_sprint") else 1.0)
+	w.raketen_max += int(m.get("raketen", 0.0))
+	w.laser_mult *= 1.0 + m.get("laser_mult", 0.0)
+	w.feuerrate *= 1.0 + m.get("feuerrate", 0.0)
+	w.raketen_mult *= 1.0 + m.get("raketen_mult", 0.0)
+	w.krit = minf(w.krit + m.get("krit", 0.0), 0.75)
+	w.schild_laden *= 1.0 + m.get("schild_laden", 0.0)
+	w.schild_pause = maxf(w.schild_pause - m.get("schild_pause", 0.0), 1.0)
+	w.erz_mult *= 1.0 + m.get("erz_mult", 0.0)
+	w.notschild += int(m.get("spezial_notschild", 0.0))
+	if m.has("spezial_magnet"):
+		w.magnet += 4.0 * m.spezial_magnet
+	w["durchschlag_extra"] = int(m.get("spezial_durchschlag", 0.0))
+	return w
 
 
 ## Neues Spiel: alles auf null, außer den Lautstärke-Einstellungen (die liegen in einer eigenen Datei).
@@ -347,6 +416,9 @@ func zuruecksetzen() -> void:
 	waffen = []
 	waffen_stufen = {}
 	forschung = []
+	module = []
+	eingebaut = {}
+	bauteile = 0
 	speichern()
 
 
@@ -362,6 +434,9 @@ func laden() -> void:
 	waffen = c.get_value("meta", "waffen", [])
 	waffen_stufen = c.get_value("meta", "waffen_stufen", {})
 	forschung = c.get_value("meta", "forschung", [])
+	module = c.get_value("meta", "module", [])
+	eingebaut = c.get_value("meta", "eingebaut", {})
+	bauteile = c.get_value("meta", "bauteile", 0)
 	spielzeit = c.get_value("meta", "spielzeit", 0.0)
 	spielzeit_tage = c.get_value("meta", "spielzeit_tage", {})
 	zuletzt = c.get_value("meta", "zuletzt", 0)
@@ -401,6 +476,9 @@ func speichern() -> void:
 	c.set_value("meta", "waffen", waffen)
 	c.set_value("meta", "waffen_stufen", waffen_stufen)
 	c.set_value("meta", "forschung", forschung)
+	c.set_value("meta", "module", module)
+	c.set_value("meta", "eingebaut", eingebaut)
+	c.set_value("meta", "bauteile", bauteile)
 	c.set_value("meta", "spielzeit", spielzeit)
 	c.set_value("meta", "spielzeit_tage", spielzeit_tage)
 	c.set_value("meta", "zuletzt", int(Time.get_unix_time_from_system()) if spielzeit > 0.0 else zuletzt)
