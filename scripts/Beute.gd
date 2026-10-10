@@ -1,19 +1,24 @@
 class_name Beute
 extends Area3D
-## Aufsammelbares: Erz (Währung), Schild, Energie, Raketen.
+## Aufsammelbares. Jede Art hat eine eigene Form (auch ohne Farbe erkennbar) und ein
+## Schild mit Name und Menge darüber, das aus der Nähe sichtbar wird.
+## Erz (Kristallbündel), Schild (Kugel mit Ring), Reparatur (Kreuz), Energie (Batterie), Rakete.
 
 const ARTEN := {
-	"erz": {"farbe": Color(1.0, 0.8, 0.2), "menge": 5},
-	"schild": {"farbe": Color(0.3, 0.6, 1.0), "menge": 25},
-	"reparatur": {"farbe": Color(0.3, 1.0, 0.45), "menge": 30},
-	"energie": {"farbe": Color(0.85, 1.0, 0.3), "menge": 30},
-	"rakete": {"farbe": Color(1.0, 0.3, 0.3), "menge": 2},
+	"erz": {"farbe": Color(1.0, 0.8, 0.2), "menge": 5, "name": "ERZ"},
+	"schild": {"farbe": Color(0.3, 0.6, 1.0), "menge": 25, "name": "SCHILD"},
+	"reparatur": {"farbe": Color(0.3, 1.0, 0.45), "menge": 30, "name": "HÜLLE"},
+	"energie": {"farbe": Color(0.85, 1.0, 0.3), "menge": 30, "name": "ENERGIE"},
+	"rakete": {"farbe": Color(1.0, 0.3, 0.3), "menge": 2, "name": "RAKETEN"},
 }
+const SICHTWEITE := 30.0   ## ab hier erscheint das Namensschild
 
 var art := "erz"
 var menge := 5
 var _t := 0.0
-var _mesh: MeshInstance3D
+var _form: Node3D
+var _mat: StandardMaterial3D
+var _glanz: StandardMaterial3D
 
 
 static func neu(p_art: String, pos: Vector3, p_menge := -1) -> Beute:
@@ -25,6 +30,10 @@ static func neu(p_art: String, pos: Vector3, p_menge := -1) -> Beute:
 	return b
 
 
+static func beschriftung(p_art: String, p_menge: int) -> String:
+	return "%s +%d" % [ARTEN[p_art].name, p_menge]
+
+
 func _ready() -> void:
 	collision_layer = 8
 	collision_mask = 2
@@ -34,38 +43,124 @@ func _ready() -> void:
 	form.shape = kugel
 	add_child(form)
 	var farbe: Color = ARTEN[art].farbe
-	var m := StandardMaterial3D.new()
-	m.albedo_color = farbe
-	m.emission_enabled = true
-	m.emission = farbe
-	m.emission_energy_multiplier = 2.0
-	_mesh = MeshInstance3D.new()
-	if art == "erz":
-		var k := SphereMesh.new()   # grob facettiert: wie ein Kristall
-		k.radius = 0.45
-		k.height = 1.1
-		k.radial_segments = 4
-		k.rings = 2
-		k.material = m
-		_mesh.mesh = k
-	else:
-		var b := BoxMesh.new()
-		b.size = Vector3(0.7, 0.7, 0.7)
-		b.material = m
-		_mesh.mesh = b
-	add_child(_mesh)
+	_mat = StandardMaterial3D.new()
+	_mat.albedo_color = farbe
+	_mat.metallic = 0.4
+	_mat.roughness = 0.35
+	_mat.emission_enabled = true
+	_mat.emission = farbe
+	_mat.emission_energy_multiplier = 0.9
+	_glanz = StandardMaterial3D.new()
+	_glanz.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_glanz.albedo_color = Color(farbe.r * 2.5, farbe.g * 2.5, farbe.b * 2.5)
+	_form = Node3D.new()
+	add_child(_form)
+	match art:
+		"erz":
+			for w in [Vector3(0, 0, 0), Vector3(0.5, 0, 0.6), Vector3(-0.5, 0, -0.4), Vector3(0.1, 0, -0.7)]:
+				var k := _teil(_kristall(0.22, 0.9), Vector3(w.x * 0.35, -0.1, w.z * 0.35))
+				k.rotation = Vector3(w.x, randf() * TAU, w.z)
+		"schild":
+			var blase := SphereMesh.new()
+			blase.radius = 0.45
+			blase.height = 0.9
+			_teil(blase, Vector3.ZERO)
+			var ring := TorusMesh.new()
+			ring.inner_radius = 0.6
+			ring.outer_radius = 0.72
+			_teil(ring, Vector3.ZERO, _glanz).rotation.x = PI / 2.0
+			var ring2 := TorusMesh.new()
+			ring2.inner_radius = 0.6
+			ring2.outer_radius = 0.72
+			_teil(ring2, Vector3.ZERO, _glanz).rotation.z = PI / 2.0
+		"reparatur":
+			_teil(_box(Vector3(0.3, 1.0, 0.3)), Vector3.ZERO)
+			_teil(_box(Vector3(1.0, 0.3, 0.3)), Vector3.ZERO)
+			_teil(_box(Vector3(0.36, 0.36, 0.36)), Vector3.ZERO, _glanz)
+		"energie":
+			var zelle := CylinderMesh.new()
+			zelle.top_radius = 0.28
+			zelle.bottom_radius = 0.28
+			zelle.height = 0.8
+			_teil(zelle, Vector3.ZERO)
+			var pol := CylinderMesh.new()
+			pol.top_radius = 0.12
+			pol.bottom_radius = 0.12
+			pol.height = 0.16
+			_teil(pol, Vector3(0, 0.48, 0), _glanz)
+			for y in [-0.2, 0.0, 0.2]:
+				var band := CylinderMesh.new()
+				band.top_radius = 0.3
+				band.bottom_radius = 0.3
+				band.height = 0.06
+				_teil(band, Vector3(0, y, 0), _glanz)
+		"rakete":
+			for x in [-0.22, 0.22]:
+				var rumpf := CylinderMesh.new()
+				rumpf.top_radius = 0.12
+				rumpf.bottom_radius = 0.12
+				rumpf.height = 0.8
+				_teil(rumpf, Vector3(x, -0.05, 0))
+				var spitze := CylinderMesh.new()
+				spitze.top_radius = 0.0
+				spitze.bottom_radius = 0.12
+				spitze.height = 0.3
+				_teil(spitze, Vector3(x, 0.5, 0), _glanz)
+				_teil(_box(Vector3(0.36, 0.22, 0.04)), Vector3(x, -0.38, 0))
+	_form.scale = Vector3.ONE * 1.3
+
+	var schild := Label3D.new()
+	schild.text = beschriftung(art, menge)
+	schild.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	schild.font_size = 40
+	schild.outline_size = 12
+	# Schrumpft mit der Entfernung (Tiefenwirkung, Schilder überdecken sich nicht), aber groß genug:
+	# bei 1080p etwa 33 Pixel hoch aus 8 m, 18 Pixel aus 15 m.
+	schild.pixel_size = 0.012
+	schild.modulate = farbe.lerp(Color.WHITE, 0.35)
+	schild.outline_modulate = Color(0, 0, 0, 0.85)
+	schild.position = Vector3(0, 1.7, 0)
+	schild.visibility_range_end = SICHTWEITE
+	schild.visibility_range_end_margin = 4.0
+	schild.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+	add_child(schild)
+
 	var l := OmniLight3D.new()
 	l.light_color = farbe
-	l.omni_range = 3.5
-	l.light_energy = 0.8
+	l.omni_range = 4.0
+	l.light_energy = 1.0
 	add_child(l)
 	body_entered.connect(_rein)
 
 
+func _box(g: Vector3) -> BoxMesh:
+	var b := BoxMesh.new()
+	b.size = g
+	return b
+
+
+func _kristall(r: float, h: float) -> SphereMesh:
+	var k := SphereMesh.new()   # vier Seiten, zwei Ringe: eine spitze Doppelpyramide
+	k.radius = r
+	k.height = h
+	k.radial_segments = 4
+	k.rings = 2
+	return k
+
+
+func _teil(mesh: Mesh, pos: Vector3, mat: Material = null) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.material_override = mat if mat != null else _mat
+	mi.position = pos
+	_form.add_child(mi)
+	return mi
+
+
 func _process(dt: float) -> void:
 	_t += dt
-	_mesh.rotation.y = _t * 2.0
-	_mesh.position.y = sin(_t * 2.5) * 0.2
+	_form.rotation.y = _t * 1.6
+	_form.position.y = sin(_t * 2.5) * 0.15
 
 
 func _rein(k: Node3D) -> void:

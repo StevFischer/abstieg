@@ -96,6 +96,11 @@ func _starte_lauf() -> void:
 	schiff.gestorben.connect(func(): _schiff_tot("Schiff zerstört"))
 	schiff.getroffen.connect(func(s: float): hud.blitz(s))
 	schiff.erz_gefunden.connect(func(m: int): level_erz += m)
+	schiff.aufgenommen.connect(func(art: String, m: int):
+		hud.aufnahme(Beute.beschriftung(art, m), Beute.ARTEN[art].farbe.lerp(Color.WHITE, 0.3)))
+	schiff.voll.connect(func(art: String):
+		if art != "erz":
+			hud.aufnahme("%s VOLL" % Beute.ARTEN[art].name, Color(0.7, 0.7, 0.7)))
 	spiel.add_child(schiff)
 	hangar_ebene.visible = false
 	hud.visible = true
@@ -402,6 +407,10 @@ func _autotest() -> void:
 	klang.speichern()
 	_starte_lauf()
 	schiff.unverwundbar = true
+	if "--zeige-beute" in OS.get_cmdline_user_args():
+		await _beute_schau()
+		get_tree().quit(0)
+		return
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--start-tiefe="):
 			tiefe = int(a.get_slice("=", 1))
@@ -480,6 +489,29 @@ func _autotest() -> void:
 	Protokoll.schreib("test", "Abgespielte Töne: %s" % get_node("/root/Klang").zaehler)
 	Protokoll.schreib("test", "AUTOTEST %s" % ("BESTANDEN" if ok else "FEHLGESCHLAGEN"))
 	get_tree().quit(0 if ok else 1)
+
+
+## Alle Fundstückarten nebeneinander vor dem Schiff — in 8 m und 15 m Abstand — für die Bildprüfung.
+func _beute_schau() -> void:
+	for g in get_tree().get_nodes_in_group("gegner"):
+		g.queue_free()
+	schiff.huelle = 50.0
+	schiff.raketen = schiff.raketen_max
+	var vor := -schiff.global_basis.z
+	var rechts := schiff.global_basis.x
+	var arten := Beute.ARTEN.keys()
+	for reihe in [[8.0, 0.0], [15.0, 2.2]]:
+		for i in arten.size():
+			var p: Vector3 = schiff.global_position + vor * reihe[0] + rechts * (i - 2) * 3.4 + Vector3(0, reihe[1] - 0.8, 0)
+			level.add_child(Beute.neu(arten[i], p))
+	await _warte(1.5)
+	_foto("beute_reihe")
+	# In die Reparatur der vorderen Reihe fliegen: Meldung "HÜLLE +30"
+	var ziel: Vector3 = schiff.global_position + vor * 8.0 + rechts * (arten.find("reparatur") - 2) * 3.4 + Vector3(0, -0.8, 0)
+	schiff.autopilot.append(ziel)
+	await _warte(1.2)
+	_foto("beute_meldung")
+	Protokoll.schreib("test", "Beute-Schau: Hülle jetzt %.0f (vorher 50)" % schiff.huelle)
 
 
 func _warte(s: float) -> void:

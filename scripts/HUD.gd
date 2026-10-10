@@ -17,6 +17,8 @@ var _tiefe: Label
 var _erz: Label
 var _status: Label
 var _mitteilung: Label
+var _aufnahme: Label
+var _aufnahme_tw: Tween
 var _blitz: ColorRect
 var _zeichnung: Control
 
@@ -80,6 +82,10 @@ func _init() -> void:
 	_mitteilung.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_ecke(_mitteilung, 0.5, 0.5, Vector2(-900, -300), Vector2(900, -80))
 	wurzel.add_child(_mitteilung)
+	_aufnahme = _label("", 30, GRUEN)
+	_aufnahme.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_ecke(_aufnahme, 0.5, 0.5, Vector2(-500, 90), Vector2(500, 140))
+	wurzel.add_child(_aufnahme)
 
 
 func _ecke(c: Control, ax: float, ay: float, von: Vector2, bis: Vector2) -> void:
@@ -157,6 +163,18 @@ func mitteilung(text: String, dauer := 2.5, farbe := GELB) -> void:
 	var tw := create_tween()
 	tw.tween_interval(dauer)
 	tw.tween_property(_mitteilung, "modulate:a", 0.0, 0.8)
+
+
+## Kurze Meldung unter dem Fadenkreuz: was eingesammelt wurde (oder dass es voll ist).
+func aufnahme(text: String, farbe: Color) -> void:
+	_aufnahme.text = text
+	_aufnahme.add_theme_color_override("font_color", farbe)
+	_aufnahme.modulate.a = 1.0
+	if _aufnahme_tw:
+		_aufnahme_tw.kill()
+	_aufnahme_tw = create_tween()
+	_aufnahme_tw.tween_interval(1.2)
+	_aufnahme_tw.tween_property(_aufnahme, "modulate:a", 0.0, 0.6)
 
 
 func blitz(staerke: float) -> void:

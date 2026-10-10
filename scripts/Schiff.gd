@@ -5,6 +5,8 @@ extends CharacterBody3D
 signal gestorben
 signal getroffen(schaden: float)
 signal erz_gefunden(menge: int)
+signal aufgenommen(art: String, menge: int)   ## für die HUD-Meldung
+signal voll(art: String)                       ## berührt, aber nicht gebraucht
 
 const MAUS := 0.0022
 const PAD_DREH := 2.6
@@ -157,6 +159,15 @@ func _autopilot_fliegen(dt: float) -> void:
 
 
 func aufnehmen(art: String, menge: int) -> bool:
+	var genommen := _aufnehmen(art, menge)
+	if genommen:
+		aufgenommen.emit(art, menge)
+	else:
+		voll.emit(art)
+	return genommen
+
+
+func _aufnehmen(art: String, menge: int) -> bool:
 	match art:
 		"schild":
 			if schild >= schild_max:
