@@ -8,7 +8,8 @@ var _pfad := ""
 
 
 func _ready() -> void:
-	_pfad = ProjectSettings.globalize_path("res://abstieg.log")
+	# Auf dem Handy ist res:// schreibgeschützt — dort in den App-Speicher schreiben.
+	_pfad = ProjectSettings.globalize_path("user://abstieg.log" if OS.has_feature("android") else "res://abstieg.log")
 	if FileAccess.file_exists(_pfad):
 		var f := FileAccess.open(_pfad, FileAccess.READ)
 		var zeilen := f.get_as_text().split("\n")

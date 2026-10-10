@@ -30,6 +30,7 @@ func _init() -> void:
 
 func aufbauen() -> void:
 	for k in get_children():
+		remove_child(k)          # sofort raus, damit find_child den neuen Knopf findet, nicht den alten
 		k.queue_free()
 	var grund := ColorRect.new()
 	grund.color = Color(0.03, 0.025, 0.02)
@@ -69,6 +70,10 @@ func aufbauen() -> void:
 	links.add_child(raster)
 	for a in Meta.AUFRUESTUNGEN:
 		raster.add_child(_aufruestkarte(a))
+	_info = _label("Steuerkreuz/Maus auf eine Karte: Name und Werte erscheinen hier.", 17, Color(0.7, 0.68, 0.6), true)
+	_info.custom_minimum_size = Vector2(0, 52)
+	_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	spalte.add_child(_info)
 	spalte.add_child(HSeparator.new())
 	var los := Button.new()
 	los.text = "ABSTIEG BEGINNEN"
@@ -98,7 +103,14 @@ func aufbauen() -> void:
 		"1–4 Laser wählen · 5–8 Rakete wählen · Tab Leitstrahl · F Scheinwerfer · Esc Pause\n" +
 		"Controller: linker Stick fliegen · rechter Stick drehen · LB/RB rollen · A/B hoch/runter · RT Laser · LT Rakete · Steuerkreuz ←→ Laser, ↑↓ Rakete",
 		16, Color(0.6, 0.58, 0.52), true))
-	erster.call_deferred("grab_focus")
+	# Nach einem Kauf bleibt der Fokus auf demselben Knopf (Controller), sonst auf "Abstieg beginnen".
+	var ziel: Control = erster
+	if _fokus_merken != "":
+		var k := find_child(_fokus_merken, true, false)
+		if k is Control:
+			ziel = k
+	_fokus_merken = ""
+	ziel.call_deferred("grab_focus")
 
 
 ## Sicherheitsabfrage — Neues Spiel lässt sich nicht rückgängig machen.
@@ -177,17 +189,15 @@ func _aufruestkarte(a: Dictionary) -> Control:
 	b.custom_minimum_size = Vector2(0, 36)
 	b.add_theme_font_size_override("font_size", 16)
 	var id: String = a.id
+	b.name = "Knopf_" + id
+	var tip := _aufruest_tooltip(a, st)
 	if Meta.ausgereizt(id):
 		b.text = "ausgebaut"
-		b.disabled = true
+		_knopf(b, false, tip, func(): return false, "Schon ganz ausgebaut")
 	else:
 		b.text = "Kaufen · %d" % Meta.kosten(id)
-		b.disabled = not Meta.kaufbar(id)
-		b.pressed.connect(func():
-			if Meta.kaufen(id):
-				aufbauen())
+		_knopf(b, Meta.kaufbar(id), tip, func(): return Meta.kaufen(id), "Zu wenig Erz")
 	spalte.add_child(b)
-	var tip := _aufruest_tooltip(a, st)
 	karte.tooltip_text = tip
 	b.tooltip_text = tip
 	return karte
@@ -260,26 +270,47 @@ func _waffenkarte(w: Dictionary, taste: int, frei: Array) -> Control:
 	b.custom_minimum_size = Vector2(0, 36)
 	b.add_theme_font_size_override("font_size", 16)
 	var id: String = w.id
+	b.name = "Knopf_" + id
+	var tip := _tooltip(w, besitzt, mk)
 	if besitzt and mk >= Waffen.MAX_STUFE:
 		b.text = "Mk V · max"
-		b.disabled = true
+		_knopf(b, false, tip, func(): return false, "Schon Mk V")
 	elif besitzt:
 		b.text = "%s · %d" % [Waffen.MK[mk + 1], Waffen.verbessern_preis(id, mk)]
-		b.disabled = not Meta.waffe_verbesserbar(id)
-		b.pressed.connect(func():
-			if Meta.waffe_verbessern(id):
-				aufbauen())
+		_knopf(b, Meta.waffe_verbesserbar(id), tip, func(): return Meta.waffe_verbessern(id), "Zu wenig Erz")
 	else:
 		b.text = "Kaufen · %d" % w.preis
-		b.disabled = not Meta.waffe_kaufbar(id)
-		b.pressed.connect(func():
-			if Meta.waffe_kaufen(id):
-				aufbauen())
+		_knopf(b, Meta.waffe_kaufbar(id), tip, func(): return Meta.waffe_kaufen(id), "Zu wenig Erz")
 	spalte.add_child(b)
-	var tip := _tooltip(w, besitzt, mk)
 	karte.tooltip_text = tip
 	b.tooltip_text = tip
 	return karte
+
+
+## Kaufknopf, der auch mit dem Controller funktioniert: nie gesperrt (gesperrte Knöpfe kann man mit dem
+## Steuerkreuz nicht anwählen), sondern abgedunkelt; Fokus zeigt den Tooltip-Text im Infofeld.
+func _knopf(b: Button, moeglich: bool, tip: String, kaufen: Callable, warum: String) -> void:
+	if not moeglich:
+		b.modulate = Color(1, 1, 1, 0.45)
+	b.focus_entered.connect(func(): _info_zeigen(tip))
+	b.mouse_entered.connect(func(): _info_zeigen(tip))
+	b.pressed.connect(func():
+		if moeglich and kaufen.call():
+			_fokus_merken = b.name
+			aufbauen()
+		else:
+			_info_zeigen(warum + "\n" + tip, true))
+
+
+var _info: Label
+var _fokus_merken := ""
+
+
+func _info_zeigen(text: String, warnung := false) -> void:
+	if _info == null or not is_instance_valid(_info):
+		return
+	_info.text = text
+	_info.add_theme_color_override("font_color", Color(1.0, 0.5, 0.4) if warnung else Color(0.92, 0.9, 0.82))
 
 
 func _tooltip(w: Dictionary, besitzt: bool, mk: int) -> String:

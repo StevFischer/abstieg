@@ -30,6 +30,8 @@ var _leit_ziel := Vector3.ZERO
 var _leit_weg := 0.0
 var _rng := RandomNumberGenerator.new()
 var _piep_t := 0.0
+var _bilder: Array[float] = []      ## Bildzeiten der laufenden Tiefe — fürs Leistungsprotokoll (Handy)
+var _bilder_tiefe := 0
 var _alarm_zeit := 0.0
 
 
@@ -114,7 +116,26 @@ func _starte_lauf() -> void:
 	_lade_level()
 
 
+## Leistung der eben gespielten Tiefe ins Log: Mittel und schlechteste 5 % — so lässt sich am Handy-Log
+## ablesen, ob es flüssig läuft, ohne dass jemand misst.
+func _leistung_protokollieren() -> void:
+	if _bilder.size() < 30:
+		_bilder.clear()
+		return
+	var summe := 0.0
+	for b in _bilder:
+		summe += b
+	var sortiert := _bilder.duplicate()
+	sortiert.sort()
+	Protokoll.schreib("leistung", "Tiefe %d: %.0f fps im Mittel, schlechteste 5 %% %.0f fps, %d Bilder, Renderer %s, Auflösung %s" % [
+		_bilder_tiefe, _bilder.size() / summe, 1.0 / sortiert[int(sortiert.size() * 0.95)], _bilder.size(),
+		ProjectSettings.get_setting_with_override("rendering/renderer/rendering_method"), get_viewport().get_visible_rect().size])
+	_bilder.clear()
+
+
 func _lade_level() -> void:
+	_leistung_protokollieren()
+	_bilder_tiefe = tiefe
 	var t0 := Time.get_ticks_msec()
 	zustand = "flug"
 	countdown = -1.0
@@ -366,6 +387,7 @@ func _auffuellung(huelle: int, raketen: int) -> String:
 func _schiff_tot(grund: String) -> void:
 	if zustand != "flug":
 		return
+	_leistung_protokollieren()
 	zustand = "tot"
 	schiff.aktiv = false
 	Effekte.explosion(level, schiff.global_position, Color(1.0, 0.5, 0.2), 6.0)
@@ -401,6 +423,7 @@ func _process(dt: float) -> void:
 			countdown = -1.0
 			_schiff_tot("Die Mine ist explodiert")
 			return
+	_bilder.append(dt)
 	hud.setze_erz(level_erz, lauf_erz, Meta.bank)
 	if boss != null and is_instance_valid(boss):
 		hud.boss_wert(boss.hp, boss.hp_max)
@@ -545,6 +568,10 @@ func _autotest() -> void:
 	schiff.collision_mask = 1
 	if "--zeige-waffen" in OS.get_cmdline_user_args():
 		await _waffen_schau()
+		get_tree().quit(0)
+		return
+	if "--controller-test" in OS.get_cmdline_user_args():
+		await _controller_test()
 		get_tree().quit(0)
 		return
 	if "--toene-export" in OS.get_cmdline_user_args():
@@ -801,6 +828,135 @@ func _waffen_schau() -> void:
 				nach += z.hp
 			zeile += "  %s %.0f" % [Waffen.MK[st], vorher - nach]
 		Protokoll.schreib("test", "Version %-14s%s" % [Waffen.finde(id).name, zeile])
+
+
+# --- Controller-Test: alles nur mit simulierten Gamepad-Eingaben (wie der GameSir am Handy) -----------
+
+func _knopf_druck(knopf: JoyButton, halten := 0.12) -> void:
+	var e := InputEventJoypadButton.new()
+	e.device = 0
+	e.button_index = knopf
+	e.pressed = true
+	Input.parse_input_event(e)
+	await _warte(halten)
+	var los := e.duplicate()
+	los.pressed = false
+	Input.parse_input_event(los)
+	await _warte(0.12)
+
+
+func _achse(achse: JoyAxis, wert: float) -> void:
+	var e := InputEventJoypadMotion.new()
+	e.device = 0
+	e.axis = achse
+	e.axis_value = wert
+	Input.parse_input_event(e)
+
+
+func _controller_test() -> void:
+	autotest = false        # wie im echten Spiel: Pause und Mausfang aktiv (Spielstand bleibt der Testspielstand)
+	var erg: Array[String] = []
+	var ok := true
+	Meta.bank = 2000
+	Meta.waffen = ["streu"]
+	Meta.speichern()
+	# 1) Hangar nur mit dem Steuerkreuz
+	_zeige_hangar()
+	await _warte(0.6)
+	var start_fokus := get_viewport().gui_get_focus_owner()
+	await _knopf_druck(JOY_BUTTON_DPAD_UP)
+	await _knopf_druck(JOY_BUTTON_DPAD_UP)
+	var karte_fokus := get_viewport().gui_get_focus_owner()
+	var karte_name := String(karte_fokus.name) if karte_fokus else ""
+	var start_name := String(start_fokus.name) if start_fokus else ""
+	var info: String = hangar._info.text
+	erg.append("Hangar: Start-Fokus %s, nach 2× Steuerkreuz hoch Fokus %s, Infofeld \"%s\"" % [
+		start_fokus.name if start_fokus else "keiner", karte_fokus.name if karte_fokus else "keiner", info.get_slice("\n", 0)])
+	var bank_vor := Meta.bank
+	await _knopf_druck(JOY_BUTTON_A)
+	await _warte(0.3)
+	erg.append("Hangar: A auf %s → Bank %d → %d, Fokus danach %s" % [
+		karte_name, bank_vor, Meta.bank,
+		get_viewport().gui_get_focus_owner().name if get_viewport().gui_get_focus_owner() else "keiner"])
+	_foto("controller_hangar")
+	ok = ok and karte_name.begins_with("Knopf_") and karte_name != start_name and info.length() > 5 and Meta.bank < bank_vor
+	# zurück zu "Abstieg beginnen" und starten
+	for i in 8:
+		var f := get_viewport().gui_get_focus_owner()
+		if f is Button and f.text == "ABSTIEG BEGINNEN":
+			break
+		await _knopf_druck(JOY_BUTTON_DPAD_DOWN)
+	var vor_start := get_viewport().gui_get_focus_owner()
+	await _knopf_druck(JOY_BUTTON_A)
+	await _warte(1.5)
+	erg.append("Start mit A (Fokus war %s): Zustand %s" % [vor_start.text if vor_start is Button else "?", zustand])
+	ok = ok and zustand == "flug"
+	if zustand != "flug":
+		for e in erg:
+			Protokoll.schreib("test", "Controller: " + e)
+		Protokoll.schreib("test", "CONTROLLER-TEST FEHLGESCHLAGEN")
+		return
+	for g in get_tree().get_nodes_in_group("gegner"):
+		g.free()
+	schiff.unverwundbar = true
+	await _warte(2.5)
+	# 2) Fliegen: linker Stick vor, rechter Stick drehen, LB rollen, A hoch
+	var p0 := schiff.global_position
+	_achse(JOY_AXIS_LEFT_Y, -1.0)
+	await _warte(1.2)
+	_achse(JOY_AXIS_LEFT_Y, 0.0)
+	var vor := schiff.global_position.distance_to(p0)
+	var b0 := schiff.global_basis
+	_achse(JOY_AXIS_RIGHT_X, 1.0)
+	await _warte(0.6)
+	_achse(JOY_AXIS_RIGHT_X, 0.0)
+	var dreh := rad_to_deg(b0.z.angle_to(schiff.global_basis.z))
+	var b1 := schiff.global_basis
+	await _knopf_druck(JOY_BUTTON_LEFT_SHOULDER, 0.5)
+	var roll := rad_to_deg(b1.y.angle_to(schiff.global_basis.y))
+	var y0 := schiff.global_position.y
+	await _knopf_druck(JOY_BUTTON_A, 0.8)
+	var hoch := schiff.global_position.y - y0
+	erg.append("Flug: linker Stick vor %.1f m, rechter Stick %.0f° gedreht, LB %.0f° gerollt, A %.1f m hoch" % [vor, dreh, roll, hoch])
+	ok = ok and vor > 4.0 and dreh > 20.0 and roll > 20.0 and hoch > 0.5
+	# 3) Waffen: RT feuern, Steuerkreuz rechts wechseln, LT Rakete
+	var schuesse := 0
+	_achse(JOY_AXIS_TRIGGER_RIGHT, 1.0)
+	for i in 30:
+		await get_tree().physics_frame
+		for k in level.get_children():
+			if k is Geschoss and k.vom_spieler and not k.has_meta("gezaehlt"):
+				k.set_meta("gezaehlt", true)
+				schuesse += 1
+	_achse(JOY_AXIS_TRIGGER_RIGHT, 0.0)
+	var laser_vor := schiff.laser_wahl
+	await _knopf_druck(JOY_BUTTON_DPAD_RIGHT)
+	var laser_nach := schiff.laser_wahl
+	var rak_vor := schiff.raketen
+	_achse(JOY_AXIS_TRIGGER_LEFT, 1.0)
+	await _warte(0.2)
+	_achse(JOY_AXIS_TRIGGER_LEFT, 0.0)
+	erg.append("Waffen: RT %d Schüsse in 0,5 s, Steuerkreuz rechts %s → %s, LT Raketen %d → %d" % [
+		schuesse, laser_vor, laser_nach, rak_vor, schiff.raketen])
+	_foto("controller_flug")
+	ok = ok and schuesse >= 3 and laser_nach != laser_vor and schiff.raketen < rak_vor
+	# 4) Pause (Start), Optionen per Steuerkreuz + A, zurück mit B, weiter mit Start
+	await _knopf_druck(JOY_BUTTON_START)
+	var pausiert := get_tree().paused
+	await _knopf_druck(JOY_BUTTON_DPAD_DOWN)
+	await _knopf_druck(JOY_BUTTON_A)
+	await _warte(0.3)
+	var opt_auf := optionen.visible
+	_foto("controller_optionen")
+	await _knopf_druck(JOY_BUTTON_B)
+	var opt_zu := not optionen.visible and get_tree().paused
+	await _knopf_druck(JOY_BUTTON_START)
+	erg.append("Pause mit Start %s, Optionen per Steuerkreuz+A %s, mit B zurück in die Pause %s, Start weiter %s" % [
+		pausiert, opt_auf, opt_zu, not get_tree().paused])
+	ok = ok and pausiert and opt_auf and opt_zu and not get_tree().paused
+	for e in erg:
+		Protokoll.schreib("test", "Controller: " + e)
+	Protokoll.schreib("test", "CONTROLLER-TEST %s" % ("BESTANDEN" if ok else "FEHLGESCHLAGEN"))
 
 
 ## Schildträger umkreisen: Anteil der Zeit, in der seine ungeschützte Seite zum Schiff zeigt.

@@ -6,23 +6,32 @@ extends RefCounted
 ## dieselbe Verschiebung, das Gitter bleibt also dicht, wirkt aber wie gehauener Fels.
 
 
+const BLOCK := 3      ## Kantenlänge eines Wandblocks in Zellen (18 m)
+
+
 static func baue(gen: LevelGen, thema: Dictionary, mats: Dictionary) -> Node3D:
 	var mine := Node3D.new()
 	mine.name = "Mine"
 	var s := LevelGen.ZELLE
 	var zacken: float = thema.zacken
 	var arten := ["boden", "decke", "wand", "paneel"]
-	var werkzeuge := {}
-	var anzahl := {}
-	for k in arten:
-		var t := SurfaceTool.new()
-		t.begin(Mesh.PRIMITIVE_TRIANGLES)
-		werkzeuge[k] = t
-		anzahl[k] = 0
+	# Die Mine in Blöcke von BLOCK³ Zellen teilen: der Mobile-Renderer (Android) beleuchtet jedes Objekt mit
+	# höchstens 8 Lampen — als ein einziges Objekt wäre die Mine auf dem Handy fast dunkel.
+	var bloecke := {}      ## Blockschlüssel -> {art: SurfaceTool, "_n": {art: Anzahl}}
 	var kollision := PackedVector3Array()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = gen.saat + 17
 	for c: Vector3i in gen.zellen:
+		var schluessel := Vector3i(floori(c.x / float(BLOCK)), floori(c.y / float(BLOCK)), floori(c.z / float(BLOCK)))
+		if not bloecke.has(schluessel):
+			var neu := {"_n": {}}
+			for k in arten:
+				var t := SurfaceTool.new()
+				t.begin(Mesh.PRIMITIVE_TRIANGLES)
+				neu[k] = t
+				neu._n[k] = 0
+			bloecke[schluessel] = neu
+		var blk: Dictionary = bloecke[schluessel]
 		for d: Vector3i in LevelGen.RICHTUNGEN:
 			if gen.zellen.has(c + d):
 				continue
@@ -33,21 +42,25 @@ static func baue(gen: LevelGen, thema: Dictionary, mats: Dictionary) -> Node3D:
 				art = "decke"
 			elif rng.randf() < 0.05:
 				art = "paneel"
-			_flaeche(werkzeuge[art], kollision, c, d, s, zacken)
-			anzahl[art] += 1
+			_flaeche(blk[art], kollision, c, d, s, zacken)
+			blk._n[art] += 1
 
-	var mesh := ArrayMesh.new()
-	for k in arten:
-		if anzahl[k] == 0:
+	for schluessel in bloecke:
+		var blk: Dictionary = bloecke[schluessel]
+		var mesh := ArrayMesh.new()
+		for k in arten:
+			if blk._n[k] == 0:
+				continue
+			var t: SurfaceTool = blk[k]
+			t.generate_tangents()
+			t.commit(mesh)
+			mesh.surface_set_material(mesh.get_surface_count() - 1, mats[k])
+		if mesh.get_surface_count() == 0:
 			continue
-		var t: SurfaceTool = werkzeuge[k]
-		t.generate_tangents()
-		t.commit(mesh)
-		mesh.surface_set_material(mesh.get_surface_count() - 1, mats[k])
-	var mi := MeshInstance3D.new()
-	mi.mesh = mesh
-	mi.name = "Waende"
-	mine.add_child(mi)
+		var mi := MeshInstance3D.new()
+		mi.mesh = mesh
+		mi.name = "Waende_%d_%d_%d" % [schluessel.x, schluessel.y, schluessel.z]
+		mine.add_child(mi)
 
 	var koerper := StaticBody3D.new()
 	koerper.collision_layer = 1
