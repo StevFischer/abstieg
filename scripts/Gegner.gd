@@ -51,6 +51,11 @@ const FLANKE := ["jaeger", "tarn", "drohne"]                    ## greifen von d
 const TARN_NAH := 14.0      ## näher als das wird der Tarnroboter sichtbar
 const TARN_UNSICHTBAR := 0.93
 const RUF_WEITE := 30.0
+## Schildträger: wie schnell er sich nach dem Schiff dreht, und wie breit sein Schild schützt
+## (Kosinus des halben Öffnungswinkels; 0,5 = ±60°). Gemessen 2026-10-10: mit 3,5 / 0,35 war er beim
+## Umkreisen selbst mit 14 m/s 0 % der Zeit ungeschützt — praktisch unverwundbar.
+static var schild_drehung := 1.2
+static var schild_kegel := 0.5
 
 static var _modelle := {}
 static var _platten: ImageTexture
@@ -555,7 +560,7 @@ func _drehen_zu(p: Vector3, dt: float) -> void:
 		return
 	vor = vor.normalized()
 	var oben := Vector3.UP if absf(vor.y) < 0.95 else Vector3.FORWARD
-	var rate := 2.0 if typ == "geschuetz" else 3.5
+	var rate := 2.0 if typ == "geschuetz" else (schild_drehung if typ == "schildtraeger" else 3.5)
 	global_basis = global_basis.slerp(Basis.looking_at(vor, oben), minf(1.0, rate * dt)).orthonormalized()
 
 
@@ -592,7 +597,7 @@ func _detonieren(radius: float) -> void:
 
 ## Treffer mit Richtung (vom Geschoss): der Schildträger blockt alles, was von vorn kommt.
 func treffer_von(s: float, richtung: Vector3) -> bool:
-	if typ == "schildtraeger" and not _tot and (-global_basis.z).dot(-richtung.normalized()) > 0.35:
+	if typ == "schildtraeger" and not _tot and (-global_basis.z).dot(-richtung.normalized()) > schild_kegel:
 		Effekte.explosion(get_parent(), global_position - global_basis.z * 1.2, Color(0.4, 0.7, 1.0), 1.0)
 		return false
 	treffer(s)

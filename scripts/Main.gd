@@ -520,6 +520,10 @@ func _autotest() -> void:
 		await _waffen_schau()
 		get_tree().quit(0)
 		return
+	if "--zeige-schild" in OS.get_cmdline_user_args():
+		await _schild_messung()
+		get_tree().quit(0)
+		return
 	if "--zeige-neu3" in OS.get_cmdline_user_args():
 		await _schau3()
 		get_tree().quit(0)
@@ -713,6 +717,40 @@ func _waffen_schau() -> void:
 		Protokoll.schreib("test", "Waffe %-14s %3d Geschosse, Schaden %6.0f, getroffene Ziele %d%s" % [
 			w.name, schuesse, schaden, getroffen, (", Splitter %d" % splitter_max) if splitter_max > 0 else ""])
 	Protokoll.schreib("test", "Schiffswerte: Schild %d / %d" % [schiff.schild, schiff.schild_max])
+
+
+## Schildträger umkreisen: Anteil der Zeit, in der seine ungeschützte Seite zum Schiff zeigt.
+func _schild_messung() -> void:
+	for g in get_tree().get_nodes_in_group("gegner"):
+		g.free()
+	await _warte(1.0)
+	var mitte := gen.mitte(gen.start_raum)
+	var st := _testgegner("schildtraeger", mitte, true)
+	st.alarmieren(schiff.global_position)
+	st.tempo = 0.0                          # nur drehen, nicht fliegen — gemessen wird die Drehung
+	var r := 6.0
+	for v in [6.0, 10.0, 14.0]:
+		var w := 0.0
+		var offen := 0
+		var bilder := 0
+		var t0 := Time.get_ticks_msec()
+		while Time.get_ticks_msec() - t0 < 6000:
+			await get_tree().physics_frame
+			w += v / r * get_physics_process_delta_time()
+			schiff.global_position = st.global_position + Vector3(cos(w), 0.3, sin(w)) * r
+			schiff.look_at(st.global_position, Vector3.UP)
+			var zum := (schiff.global_position - st.global_position).normalized()
+			if Time.get_ticks_msec() - t0 > 1000:      # erste Sekunde einschwingen lassen
+				bilder += 1
+				if (-st.global_basis.z).dot(zum) <= Gegner.schild_kegel:
+					offen += 1
+		Protokoll.schreib("test", "Schildträger (Drehung %.1f, Kegel %.2f): beim Umkreisen mit %2.0f m/s in %d m Abstand ungeschützt %3.0f %% der Zeit" % [
+			Gegner.schild_drehung, Gegner.schild_kegel, v, int(r), 100.0 * offen / maxi(bilder, 1)])
+	# Stillstand vor ihm: muss geschützt bleiben
+	schiff.global_position = st.global_position + Vector3(0, 0.3, 6)
+	await _warte(2.0)
+	var vorn := (-st.global_basis.z).dot((schiff.global_position - st.global_position).normalized()) > Gegner.schild_kegel
+	Protokoll.schreib("test", "Schildträger: von vorn stehend geschützt %s" % vorn)
 
 
 ## Portal, Minen gegen Beute, Halle mit Säulen und Lampen, Lampen an echter Decke, Neues-Spiel-Abfrage.
