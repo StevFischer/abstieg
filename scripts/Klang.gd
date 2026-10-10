@@ -264,8 +264,12 @@ func _musik_bauen() -> AudioStreamWAV:
 	var r := MUSIK_RATE
 	var takt := 2.0
 	var n := int(8 * takt * r)
+	# Überhang hinter dem Schleifenende: der Mischer liest beim Zurückspringen ein paar Samples über
+	# loop_end hinaus. Ohne Überhang stürzte das Spiel auf dem Handy nach genau einer Schleife (16,9 s)
+	# im Audio-Thread ab (SIGSEGV, 2026-10-10 15:12).
+	var ueberhang := 64
 	var werte := PackedFloat32Array()
-	werte.resize(n)
+	werte.resize(n + ueberhang)
 	var grund := [110.0, 110.0, 87.31, 87.31, 130.81, 130.81, 98.0, 98.0]
 	var akkord := [[0, 3, 7], [0, 3, 7], [0, 4, 7], [0, 4, 7], [0, 4, 7], [0, 4, 7], [0, 4, 7], [0, 4, 7]]
 	var bass_p := 0.0
@@ -278,8 +282,8 @@ func _musik_bauen() -> AudioStreamWAV:
 	var hat_tp := 0.0
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 99
-	for i in n:
-		var t := float(i) / r
+	for i in n + ueberhang:
+		var t := float(i % n) / r          # der Überhang wiederholt den Anfang, damit der Sprung sauber klingt
 		var tk := int(t / takt) % 8
 		var g: float = grund[tk]
 		var ak: Array = akkord[tk]

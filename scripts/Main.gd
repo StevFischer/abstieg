@@ -24,6 +24,7 @@ var lauf_erz := 0
 var countdown := -1.0
 var leitstrahl := true
 var autotest := false
+const HANDY_SKALA := 1.4
 var _leit_t := 0.0
 var _opt_zu_bild := -1   ## Bild, in dem die Optionen per Esc geschlossen wurden — dieselbe Esc soll nicht auch die Pause beenden
 var _leit_ziel := Vector3.ZERO
@@ -39,6 +40,15 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_rng.randomize()
 	autotest = "--autotest" in OS.get_cmdline_user_args()
+	# Handy: Oberfläche 1,4× größer (Stev 2026-10-10: „Ja, größer“) und die volle Breite des 20:9-Schirms nutzen.
+	# Am PC bleibt sie pixelgenau. Mit --handy-skala lässt sich das am PC nachstellen.
+	if OS.has_feature("android") or "--handy-skala" in OS.get_cmdline_user_args():
+		var w := get_window()
+		var px := DisplayServer.window_get_size()
+		w.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
+		w.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
+		w.content_scale_size = Vector2i(roundi(px.x / HANDY_SKALA), roundi(px.y / HANDY_SKALA))
+		Protokoll.schreib("start", "Handy-Skalierung %.1f: %s Pixel → %s Fläche" % [HANDY_SKALA, px, w.content_scale_size])
 	umgebung = WorldEnvironment.new()
 	umgebung.environment = Environment.new()
 	add_child(umgebung)

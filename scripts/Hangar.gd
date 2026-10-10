@@ -42,9 +42,18 @@ func aufbauen() -> void:
 	grund.color = Color(0.03, 0.025, 0.02)
 	grund.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(grund)
+	# Scrollbar, damit der Hangar auch auf dem Handy (größere Schrift, niedrige Fläche) ganz erreichbar ist;
+	# der Bildlauf folgt dem Fokus, also auch dem Steuerkreuz. Am PC passt alles, dort scrollt nichts.
+	var rollen := ScrollContainer.new()
+	rollen.name = "Rollen"
+	rollen.set_anchors_preset(Control.PRESET_FULL_RECT)
+	rollen.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	rollen.follow_focus = true
+	add_child(rollen)
 	var mitte := CenterContainer.new()
-	mitte.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(mitte)
+	mitte.custom_minimum_size = get_viewport_rect().size
+	mitte.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rollen.add_child(mitte)
 	var spalte := VBoxContainer.new()
 	spalte.add_theme_constant_override("separation", 10)
 	spalte.custom_minimum_size = Vector2(1500, 0)
@@ -124,9 +133,11 @@ func aufbauen() -> void:
 	ende.custom_minimum_size = Vector2(0, 40)
 	ende.pressed.connect(func(): beenden.emit())
 	spalte.add_child(ende)
-	spalte.add_child(_label(
-		"Maus drehen · WASD fliegen · Leertaste/Strg hoch/runter · Q/E rollen · Linke Maustaste Laser · Rechte Rakete\n" +
-		"1–4 Laser wählen · 5–8 Rakete wählen · Umschalt Nachbrenner · Tab Leitstrahl · F Scheinwerfer · Esc Pause\n" +
+	# Auf dem Handy nur die Controller-Zeile: Maus und Tastatur gibt es dort nicht.
+	var tastatur := "" if OS.has_feature("android") else \
+		"Maus drehen · WASD fliegen · Leertaste/Strg hoch/runter · Q/E rollen · Linke Maustaste Laser · Rechte Rakete\n" + \
+		"1–4 Laser wählen · 5–8 Rakete wählen · Umschalt Nachbrenner · Tab Leitstrahl · F Scheinwerfer · Esc Pause\n"
+	spalte.add_child(_label(tastatur +
 		"Controller: linker Stick fliegen · rechter Stick drehen · LB/RB rollen · A/B hoch/runter · RT Laser · LT Rakete · X Nachbrenner · Steuerkreuz ←→ Laser, ↑↓ Rakete · Hangar: LB/RB Reiter",
 		16, Color(0.6, 0.58, 0.52), true))
 	# Nach einem Kauf bleibt der Fokus auf demselben Knopf (Controller), sonst auf "Abstieg beginnen".

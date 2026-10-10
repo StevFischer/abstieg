@@ -21,11 +21,13 @@ const LISTE := [
 		"boden_dunkel": Color(0.20, 0.17, 0.15), "boden_hell": Color(0.58, 0.52, 0.47),
 		"decke": Color(0.32, 0.22, 0.16), "lichter": [Color(1.0, 0.55, 0.30), Color(1.0, 0.78, 0.45)],
 		"nebel": Color(0.12, 0.05, 0.03), "umgebung": Color(0.62, 0.38, 0.26), "kern": Color(1.0, 0.25, 0.05)},
-	{"name": "Kristallader", "fels": true, "zacken": 1.0, "metall": 0.25,
-		"wand_dunkel": Color(0.12, 0.06, 0.18), "wand_hell": Color(0.58, 0.40, 0.75),
-		"boden_dunkel": Color(0.13, 0.11, 0.16), "boden_hell": Color(0.42, 0.38, 0.50),
-		"decke": Color(0.22, 0.15, 0.30), "lichter": [Color(1.0, 0.4, 0.9), Color(0.4, 0.9, 1.0)],
-		"nebel": Color(0.06, 0.03, 0.09), "umgebung": Color(0.38, 0.26, 0.48), "kern": Color(0.9, 0.3, 1.0)},
+	# Kristallader 2026-10-10 aufgehellt (Stev: „ist dunkel“; gemessen 24/255): wie beim Schmelzwerk
+	# hellere Flächen, Lampen ×1,5, mehr Umgebungslicht — Farbton bleibt violett/türkis.
+	{"name": "Kristallader", "fels": true, "zacken": 1.0, "metall": 0.25, "licht": 1.5, "umgebung_kraft": 0.55,
+		"wand_dunkel": Color(0.18, 0.10, 0.26), "wand_hell": Color(0.70, 0.52, 0.88),
+		"boden_dunkel": Color(0.19, 0.16, 0.23), "boden_hell": Color(0.55, 0.50, 0.64),
+		"decke": Color(0.30, 0.22, 0.40), "lichter": [Color(1.0, 0.55, 0.95), Color(0.55, 0.95, 1.0)],
+		"nebel": Color(0.08, 0.05, 0.12), "umgebung": Color(0.50, 0.38, 0.62), "kern": Color(0.9, 0.3, 1.0)},
 	{"name": "Reaktorebene", "fels": false, "zacken": 0.0, "metall": 0.6,
 		"wand_dunkel": Color(0.10, 0.14, 0.11), "wand_hell": Color(0.45, 0.55, 0.46),
 		"boden_dunkel": Color(0.12, 0.13, 0.12), "boden_hell": Color(0.42, 0.46, 0.42),
