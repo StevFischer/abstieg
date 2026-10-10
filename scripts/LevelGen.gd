@@ -7,8 +7,8 @@ extends RefCounted
 ## Zelle c hat ihren Mittelpunkt bei c * ZELLE und reicht ZELLE/2 in jede Richtung.
 
 const ZELLE := 6.0
-const BOSS_RAUM := Vector3i(5, 3, 5)
-const REAKTOR_RAUM := Vector3i(4, 3, 4)   ## Stev: „Reaktor immer in großem Raum“ (24 × 18 × 24 m)
+const BOSS_RAUM := Vector3i(8, 5, 8)          ## 48 × 30 × 48 m
+const REAKTOR_RAUM := Vector3i(7, 4, 7)   ## Stev: „Reaktor immer in großem Raum“, 2026-10-10 vergrößert auf 42 × 24 × 42 m
 const RICHTUNGEN: Array[Vector3i] = [
 	Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0),
 	Vector3i(0, -1, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1)]

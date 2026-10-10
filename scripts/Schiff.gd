@@ -154,6 +154,20 @@ func stufe_von(id: String) -> int:
 	return int(waffen_stufen.get(id, 1))
 
 
+## Zum Laufbeginn: je Laser und Rakete die freigeschaltete Waffe mit der höchsten Mk-Stufe wählen;
+## bei gleicher Stufe die teurere (weiter hinten in der Liste). Stev: „immer die max ausgebauten als Standard“.
+func beste_vorwaehlen() -> void:
+	for liste in [Waffen.LASER, Waffen.RAKETEN]:
+		var beste := ""
+		var beste_stufe := 0
+		for w in liste:
+			if w.id in waffen_frei and stufe_von(w.id) >= beste_stufe:
+				beste = w.id
+				beste_stufe = stufe_von(w.id)
+		if beste != "":
+			waehle(beste)
+
+
 func waehle(id: String) -> bool:
 	if not id in waffen_frei:
 		waffe_gewechselt.emit("%s — im Hangar kaufen" % Waffen.finde(id).name)

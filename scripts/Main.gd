@@ -102,6 +102,7 @@ func _starte_lauf() -> void:
 	schiff.werte_setzen(Meta.schiffswerte())
 	schiff.waffen_frei = Meta.waffen_frei()
 	schiff.waffen_stufen = Meta.waffen_stufen.duplicate()
+	schiff.beste_vorwaehlen()
 	schiff.waffe_gewechselt.connect(func(n: String): hud.aufnahme(n, Color(1.0, 0.8, 0.4)))
 	schiff.gestorben.connect(func(): _schiff_tot("Schiff zerstört"))
 	schiff.getroffen.connect(func(s: float): hud.blitz(s))
@@ -114,7 +115,7 @@ func _starte_lauf() -> void:
 	spiel.add_child(schiff)
 	hangar_ebene.visible = false
 	hud.visible = true
-	Protokoll.schreib("lauf", "Lauf %d beginnt, Werte %s" % [Meta.laeufe, Meta.schiffswerte()])
+	Protokoll.schreib("lauf", "Lauf %d beginnt, Werte %s, Waffen %s + %s" % [Meta.laeufe, Meta.schiffswerte(), schiff.laser_wahl, schiff.rakete_wahl])
 	_lade_level()
 
 
@@ -706,6 +707,17 @@ func _autotest() -> void:
 		schiff.look_at(reaktor.global_position, Vector3.UP)
 		await _warte(0.5)
 		_foto("tiefe%d_2_reaktor" % t)
+		# Überblick: aus einer Ecke des Reaktorraums auf den Reaktor, damit die Raumgröße sichtbar ist.
+		var rr: Dictionary = gen.raeume[gen.reaktor_raum]
+		var eck := LevelGen.welt_von(Vector3i(rr.pos) + Vector3i(0, int(rr.groesse.y) - 1, 0))
+		var p_vor := schiff.global_position
+		schiff.global_position = eck
+		schiff.look_at(reaktor.global_position, Vector3.UP)
+		await _warte(0.4)
+		_foto("tiefe%d_2b_reaktorraum" % t)
+		Protokoll.schreib("test", "Tiefe %d: Reaktorraum %s Zellen = %.0f × %.0f × %.0f m" % [
+			t, rr.groesse, rr.groesse.x * LevelGen.ZELLE, rr.groesse.y * LevelGen.ZELLE, rr.groesse.z * LevelGen.ZELLE])
+		schiff.global_position = p_vor
 		reaktor.treffer(1.0e9)
 		await _warte(1.0)
 		_foto("tiefe%d_3_flucht" % t)
