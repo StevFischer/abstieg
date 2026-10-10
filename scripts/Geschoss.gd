@@ -25,8 +25,8 @@ static func neu(pos: Vector3, richtung: Vector3, tempo: float, p_schaden: float,
 	g.vom_spieler = p_vom_spieler
 	g.farbe = p_farbe
 	g.lenkung = p_lenkung
-	if p_lenkung > 0.0:
-		g.lebenszeit = 6.0
+	if p_lenkung > 0.0 or tempo < 40.0:
+		g.lebenszeit = 6.0      # Raketen und langsame Gegnerschüsse brauchen länger für dieselbe Strecke
 	var mi := MeshInstance3D.new()
 	var kapsel := CapsuleMesh.new()
 	kapsel.radius = 0.09 * groesse

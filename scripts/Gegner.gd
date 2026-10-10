@@ -6,11 +6,11 @@ extends CharacterBody3D
 signal zerstoert(g: Gegner)
 
 const TYPEN := {
-	"jaeger": {"hp": 30.0, "schaden": 6.0, "cd": 1.1, "tempo": 9.0, "abstand": 11.0, "radius": 1.0,
+	"jaeger": {"hp": 30.0, "schaden": 6.0, "cd": 1.1, "schuss": 16.0, "tempo": 9.0, "abstand": 11.0, "radius": 1.0,
 		"farbe": Color(0.55, 0.14, 0.10), "auge": Color(1.0, 0.25, 0.1), "erz": 4},
-	"geschuetz": {"hp": 55.0, "schaden": 9.0, "cd": 1.6, "tempo": 0.0, "abstand": 0.0, "radius": 1.0,
+	"geschuetz": {"hp": 55.0, "schaden": 9.0, "cd": 1.6, "schuss": 13.0, "tempo": 0.0, "abstand": 0.0, "radius": 1.0,
 		"farbe": Color(0.42, 0.42, 0.47), "auge": Color(1.0, 0.6, 0.1), "erz": 5},
-	"waechter": {"hp": 130.0, "schaden": 14.0, "cd": 2.0, "tempo": 4.5, "abstand": 6.0, "radius": 1.4,
+	"waechter": {"hp": 130.0, "schaden": 14.0, "cd": 2.0, "schuss": 11.0, "tempo": 4.5, "abstand": 6.0, "radius": 1.4,
 		"farbe": Color(0.22, 0.36, 0.22), "auge": Color(0.3, 1.0, 0.3), "erz": 10},
 }
 
@@ -21,6 +21,9 @@ var cd_basis := 1.0
 var tempo := 9.0
 var abstand := 10.0
 var erz := 4
+## Geschosstempo: wie im Original anfangs gemächlich (11–16 m/s, das Schiff fliegt 14),
+## +8 % je Tiefe, höchstens doppelt so schnell wie am Anfang.
+var schuss_tempo := 16.0
 var ziel: Node3D
 var welt: Node3D
 var _cd := 1.5
@@ -44,6 +47,7 @@ func einrichten(p_typ: String, stufe: int) -> void:
 	tempo = d.tempo * minf(1.0 + 0.03 * (stufe - 1), 1.8)
 	abstand = d.abstand
 	erz = int(d.erz) + stufe
+	schuss_tempo = d.schuss * minf(1.0 + 0.08 * (stufe - 1), 2.0)
 	_auge = d.auge
 	_zeit = randf() * 10.0
 	motion_mode = CharacterBody3D.MOTION_MODE_FLOATING
@@ -176,7 +180,7 @@ func _schiessen() -> void:
 	var start := global_position - global_basis.z * 1.4
 	var richtung := (ziel.global_position - start).normalized()
 	richtung = (richtung + Vector3(randf() - 0.5, randf() - 0.5, randf() - 0.5) * 0.06).normalized()
-	welt.add_child(Geschoss.neu(start, richtung, 38.0, schaden, false, _auge))
+	welt.add_child(Geschoss.neu(start, richtung, schuss_tempo, schaden, false, _auge))
 	Effekte.ton("laser_gegner", start, -4.0)
 
 
