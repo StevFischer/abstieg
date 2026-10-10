@@ -61,7 +61,9 @@ const RAFFINERIE_ERTRAG := [0, 25, 60, 120]
 const PREIS_FAKTOR := 2.0
 const MEISTER_FAKTOR := 1.25
 const AUFRUESTUNGEN := [
-	{"id": "schild", "art": "schiff", "name": "Schildgenerator", "text": "+25 Schild", "kosten": 40, "max": 8, "pro": 25.0, "meister": 5.0, "boss": 0},
+	## Stev 2026-10-10: „Schild noch deutlich weiter steigern … praktisch endlos“ — Meisterstufen geben die
+	## vollen +25 und werden je Stufe nur um 20 % des Startpreises teurer ("endlos"), nicht ×1,25.
+	{"id": "schild", "art": "schiff", "name": "Schildgenerator", "text": "+25 Schild", "kosten": 40, "max": 8, "pro": 25.0, "meister": 25.0, "endlos": 0.2, "boss": 0},
 	{"id": "panzerung", "art": "schiff", "name": "Panzerung", "text": "+25 Hülle", "kosten": 40, "max": 8, "pro": 25.0, "meister": 5.0, "boss": 0},
 	{"id": "triebwerk", "art": "schiff", "name": "Triebwerk", "text": "+8 % Tempo", "kosten": 45, "max": 5, "pro": 0.08, "meister": 0.01, "boss": 0},
 	{"id": "raketen", "art": "schiff", "name": "Raketenschacht", "text": "+2 Raketen", "kosten": 30, "max": 6, "pro": 2.0, "meister": 1.0, "boss": 0},
@@ -185,6 +187,8 @@ func kosten(id: String) -> int:
 	var mx := int(a.max)
 	if st < mx:
 		return int(round(a.kosten * pow(PREIS_FAKTOR, st)))
+	if a.has("endlos"):      # gleichmäßig statt exponentiell: bleibt praktisch endlos bezahlbar
+		return int(round(a.kosten * pow(PREIS_FAKTOR, mx) * (1.0 + float(a.endlos) * (st - mx))))
 	return int(round(a.kosten * pow(PREIS_FAKTOR, mx) * pow(MEISTER_FAKTOR, st - mx)))
 
 

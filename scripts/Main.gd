@@ -749,6 +749,7 @@ func _autotest() -> void:
 		return
 	if "--zeige-hangar" in OS.get_cmdline_user_args():
 		Meta.waffen_stufen = {"zwilling": 3, "plasma": 2, "zielsuch": 5}
+		Meta.stufen["schild"] = 12          # Meister 4: zeigt die endlose Schildstufe
 		hud.visible = false
 		hangar.aufbauen()
 		hangar_ebene.visible = true
@@ -756,7 +757,7 @@ func _autotest() -> void:
 		_foto("hangar_versionen")
 		# Tooltip: Maus über die Karte des Plasmawerfers fahren lassen
 		for k in hangar.find_children("*", "PanelContainer", true, false):
-			if k.tooltip_text.begins_with("Panzerung"):
+			if k.tooltip_text.begins_with("Schildgenerator"):
 				var bew := InputEventMouseMotion.new()
 				bew.position = k.get_global_rect().get_center()
 				bew.global_position = bew.position
@@ -1727,6 +1728,16 @@ func _aufwertungs_test() -> void:
 	Meta.stufen = {"laserschaden": 10}
 	ok = pruef.call("Preiskurve", p1 == 40 and p4 == 320 and p8 == 5120 and Waffen.verbessern_preis("streu", 2) == 2 * Waffen.verbessern_preis("streu", 1),
 		"Schild 40/%d/%d, Streufeuer Mk %d → %d" % [p4, p8, Waffen.verbessern_preis("streu", 1), Waffen.verbessern_preis("streu", 2)]) and ok
+	# Schild endlos: Meister 1/10/30 → +25 je Stufe, Preis 10240 · (1 + 0,2 · n)
+	var schild_k := []
+	var schild_w := []
+	for n in [0, 10, 30]:
+		Meta.stufen = {"schild": 8 + n}
+		schild_k.append(Meta.kosten("schild"))
+		schild_w.append(Meta.wirkung_text("schild", 8 + n))
+	Meta.stufen = {"laserschaden": 10}
+	ok = pruef.call("Schild endlos", schild_k == [10240, 30720, 71680] and schild_w == ["Schild 250", "Schild 500", "Schild 1000"] and not (func(): Meta.stufen["schild"] = 200; var a := Meta.ausgereizt("schild"); Meta.stufen.erase("schild"); return a).call(),
+		"Meister 0/10/30: %s, Preise %s" % [", ".join(schild_w), schild_k]) and ok
 	ok = pruef.call("Ohne Meister", Meta.stufen.size() == 1 and (func(): Meta.stufen["magnet"] = 3; return Meta.ausgereizt("magnet")).call(),
 		"Magnet Stufe 3/3 ausgereizt") and ok
 	# Alles auf eine Teststufe
