@@ -7,6 +7,7 @@ signal getroffen(schaden: float)
 signal erz_gefunden(menge: int)
 signal aufgenommen(art: String, menge: int)   ## für die HUD-Meldung
 signal voll(art: String)                       ## berührt, aber nicht gebraucht
+signal waffe_gewechselt(name: String)
 
 const MAUS := 0.0022
 const PAD_DREH := 2.6
@@ -34,6 +35,9 @@ var welt: Node3D            ## Hier landen die Geschosse — das aktuelle Level.
 var aktiv := true
 var unverwundbar := false
 var autopilot: Array[Vector3] = []   ## Nur für den Selbsttest: Wegpunkte abfliegen.
+var waffen_frei: Array = Waffen.START.duplicate()   ## freigeschaltete Waffen-IDs (aus dem Hangar)
+var laser_wahl := "zwilling"
+var rakete_wahl := "zielsuch"
 
 var kamera: Camera3D
 var scheinwerfer: SpotLight3D
@@ -85,6 +89,17 @@ func _unhandled_input(e: InputEvent) -> void:
 		_maus += e.relative
 	if e.is_action_pressed("licht"):
 		scheinwerfer.visible = not scheinwerfer.visible
+	if not aktiv:
+		return
+	for i in 4:
+		if e.is_action_pressed("waffe_%d" % (i + 1)):
+			waehle(Waffen.LASER[i].id)
+		if e.is_action_pressed("waffe_%d" % (i + 5)):
+			waehle(Waffen.RAKETEN[i].id)
+	if e.is_action_pressed("laser_weiter"):
+		_durchschalten(Waffen.LASER, laser_wahl)
+	if e.is_action_pressed("rakete_weiter"):
+		_durchschalten(Waffen.RAKETEN, rakete_wahl)
 
 
 func _physics_process(dt: float) -> void:
@@ -122,28 +137,84 @@ func schild_laden(dt: float) -> void:
 		schild = minf(schild_max, schild + SCHILD_LADEN * dt)
 
 
+## Waffe wählen, wenn freigeschaltet. Gibt false zurück, wenn sie noch gekauft werden muss.
+func waehle(id: String) -> bool:
+	if not id in waffen_frei:
+		waffe_gewechselt.emit("%s — im Hangar kaufen" % Waffen.finde(id).name)
+		return false
+	if Waffen.ist_laser(id):
+		laser_wahl = id
+	else:
+		rakete_wahl = id
+	waffe_gewechselt.emit(Waffen.finde(id).name)
+	return true
+
+
+func _durchschalten(liste: Array, jetzt: String) -> void:
+	var i := 0
+	for k in liste.size():
+		if liste[k].id == jetzt:
+			i = k
+	for schritt in range(1, liste.size()):
+		var w: Dictionary = liste[(i + schritt) % liste.size()]
+		if w.id in waffen_frei:
+			waehle(w.id)
+			return
+
+
 func _waffen(dt: float) -> void:
 	_laser_cd -= dt
 	_raketen_cd -= dt
 	if welt == null:
 		return
-	if Input.is_action_pressed("feuer") and _laser_cd <= 0.0 and energie >= 1.0:
+	var l := Waffen.finde(laser_wahl)
+	if Input.is_action_pressed("feuer") and _laser_cd <= 0.0 and energie >= l.energie:
 		laser_schuss()
-	if Input.is_action_just_pressed("rakete") and _raketen_cd <= 0.0 and raketen > 0:
-		_raketen_cd = 0.6
-		raketen -= 1
-		var start := global_transform * Vector3(0, -0.5, -1.2)
-		welt.add_child(Geschoss.neu(start, -global_basis.z, 34.0, 70.0 * laser_mult, true,
-			Color(1.0, 0.75, 0.3), 2.5, 1.6))
+	var r := Waffen.finde(rakete_wahl)
+	if Input.is_action_just_pressed("rakete") and _raketen_cd <= 0.0 and raketen >= int(r.kosten_munition):
+		raketen_schuss()
 
 
 func laser_schuss() -> void:
-	_laser_cd = 0.14
-	energie -= 1.0
+	var w := Waffen.finde(laser_wahl)
+	_laser_cd = w.cd
+	energie -= w.energie
 	_seite = -_seite
-	var start := global_transform * Vector3(0.45 * _seite, -0.3, -1.0)
-	welt.add_child(Geschoss.neu(start, -global_basis.z, 90.0, 12.0 * laser_mult, true, Color(1.0, 0.3, 0.2)))
-	Effekte.ton("laser", null, -9.0)
+	var versatz := 0.45 * _seite if w.anzahl == 1 else 0.0
+	var start := global_transform * Vector3(versatz, -0.3, -1.0)
+	_salve(w, start, laser_mult)
+	var klang := get_tree().root.get_node_or_null("Klang")
+	if klang:
+		klang.spiele(w.ton, null, w.db, w.tonhoehe)
+
+
+func raketen_schuss() -> void:
+	var w := Waffen.finde(rakete_wahl)
+	_raketen_cd = w.cd
+	raketen -= int(w.kosten_munition)
+	var start := global_transform * Vector3(0, -0.5, -1.2)
+	for g in _salve(w, start, laser_mult):
+		g.lenkung = w.lenkung
+		g.flaeche = w.flaeche
+		g.splitter = w.splitter
+		g.lebenszeit = 6.0
+		g.knall = 12.0 if w.flaeche > 0.0 else 4.0
+
+
+## Schießt "anzahl" Geschosse im Fächer (Streuung in Grad), gibt sie zurück.
+func _salve(w: Dictionary, start: Vector3, mult: float) -> Array:
+	var aus := []
+	var n: int = w.anzahl
+	for i in n:
+		var winkel := 0.0 if n == 1 else lerpf(-w.streuung, w.streuung, float(i) / (n - 1))
+		var r := (-global_basis.z).rotated(global_basis.y, deg_to_rad(winkel))
+		if n == 1 and w.streuung > 0.0:      # Vulkan: leichtes Flattern
+			r = r.rotated(global_basis.x, deg_to_rad(randf_range(-w.streuung, w.streuung)))
+			r = r.rotated(global_basis.y, deg_to_rad(randf_range(-w.streuung, w.streuung)))
+		var g := Geschoss.neu(start, r, w.tempo, w.schaden * mult, true, w.farbe, 0.0, w.groesse)
+		welt.add_child(g)
+		aus.append(g)
+	return aus
 
 
 func _autopilot_fliegen(dt: float) -> void:

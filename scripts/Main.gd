@@ -28,6 +28,8 @@ var _opt_zu_bild := -1   ## Bild, in dem die Optionen per Esc geschlossen wurden
 var _leit_ziel := Vector3.ZERO
 var _leit_weg := 0.0
 var _rng := RandomNumberGenerator.new()
+var _piep_t := 0.0
+var _alarm_zeit := 0.0
 
 
 func _ready() -> void:
@@ -93,6 +95,8 @@ func _starte_lauf() -> void:
 	lauf_erz = 0
 	schiff = Schiff.new()
 	schiff.werte_setzen(Meta.schiffswerte())
+	schiff.waffen_frei = Meta.waffen_frei()
+	schiff.waffe_gewechselt.connect(func(n: String): hud.aufnahme(n, Color(1.0, 0.8, 0.4)))
 	schiff.gestorben.connect(func(): _schiff_tot("Schiff zerstört"))
 	schiff.getroffen.connect(func(s: float): hud.blitz(s))
 	schiff.erz_gefunden.connect(func(m: int): level_erz += m)
@@ -230,6 +234,13 @@ func _gegner_weg(g: Gegner) -> void:
 
 func _reaktor_weg() -> void:
 	countdown = gen.fluchtzeit()
+	_alarm_zeit = 0.0
+	_piep_t = 2.0                       # erst die Sirene, dann das Piepen
+	var klang := get_node("/root/Klang")
+	klang.spiele("sirene", null, -2.0)
+	get_tree().create_timer(1.7).timeout.connect(func():
+		if countdown >= 0.0:
+			klang.spiele("sirene", null, -2.0))
 	level_erz += 10 + 5 * tiefe
 	ausgang.oeffnen()
 	hud.mitteilung("REAKTOR ZERSTÖRT", 2.0, HUD.ROT)
@@ -282,6 +293,7 @@ func _process(dt: float) -> void:
 		leitstrahl = not leitstrahl
 	if countdown >= 0.0:
 		countdown -= dt
+		_alarm(dt)
 		var blink := HUD.ROT if fmod(countdown, 1.0) > 0.5 else HUD.GELB
 		hud.status("SELBSTZERSTÖRUNG  %d:%02d  —  zum Ausgang!" % [int(countdown) / 60, int(countdown) % 60], blink)
 		if countdown <= 0.0:
@@ -291,6 +303,20 @@ func _process(dt: float) -> void:
 	hud.setze_erz(level_erz, lauf_erz, Meta.bank)
 	_leitstrahl(dt)
 	hud.werte(schiff)
+
+
+## Selbstzerstörung läuft: Minenlicht pulsiert rot, Countdown piept (letzte 10 s doppelt so schnell, höher).
+func _alarm(dt: float) -> void:
+	_alarm_zeit += dt
+	var puls := 0.5 + 0.5 * sin(_alarm_zeit * TAU * 1.2)
+	for l in get_tree().get_nodes_in_group("minenlicht"):
+		l.light_color = (l.get_meta("farbe") as Color).lerp(Color(1.0, 0.05, 0.02), 0.35 + 0.6 * puls)
+	umgebung.environment.ambient_light_color = thema.umgebung.lerp(Color(0.8, 0.05, 0.02), 0.6 * puls)
+	_piep_t -= dt
+	if _piep_t <= 0.0 and countdown > 0.0:
+		var schnell := countdown <= 10.0
+		_piep_t = 0.5 if schnell else 1.0
+		get_node("/root/Klang").spiele("piep", null, -6.0, 1.35 if schnell else 1.0)
 
 
 func _leitstrahl(dt: float) -> void:
@@ -411,6 +437,10 @@ func _autotest() -> void:
 	klang.speichern()
 	_starte_lauf()
 	schiff.unverwundbar = true
+	if "--zeige-waffen" in OS.get_cmdline_user_args():
+		await _waffen_schau()
+		get_tree().quit(0)
+		return
 	if "--zeige-gegner" in OS.get_cmdline_user_args():
 		await _gegner_schau()
 		get_tree().quit(0)
@@ -515,6 +545,73 @@ func _autotest() -> void:
 	Protokoll.schreib("test", "Abgespielte Töne: %s" % get_node("/root/Klang").zaehler)
 	Protokoll.schreib("test", "AUTOTEST %s" % ("BESTANDEN" if ok else "FEHLGESCHLAGEN"))
 	get_tree().quit(0 if ok else 1)
+
+
+## Jede Waffe auf drei zähe Ziele: Schaden, getroffene Ziele, Splitter — dazu je ein Bild.
+func _waffen_schau() -> void:
+	for g in get_tree().get_nodes_in_group("gegner"):
+		g.free()
+	await _warte(3.0)
+	var alle := []
+	for w in Waffen.LASER + Waffen.RAKETEN:
+		alle.append(w.id)
+	schiff.waffen_frei = alle
+	var vor := -schiff.global_basis.z
+	var rechts := schiff.global_basis.x
+	var ziele := []
+	for i in 3:
+		var g := Gegner.new()
+		g.einrichten("waechter", 1)
+		g.position = schiff.global_position + vor * 13.0 + rechts * (i - 1) * 3.2
+		level.add_child(g)
+		g.set_physics_process(false)
+		g.hp = 100000.0
+		ziele.append(g)
+	for w in Waffen.LASER + Waffen.RAKETEN:
+		schiff.waehle(w.id)
+		schiff.energie = schiff.energie_max
+		schiff.raketen = 99
+		var vorher := []
+		for z in ziele:
+			vorher.append(z.hp)
+		var schuesse := 0
+		var splitter_max := 0
+		if Waffen.ist_laser(w.id):
+			var t0 := Time.get_ticks_msec()
+			var foto_gemacht := false
+			while Time.get_ticks_msec() - t0 < 1500:
+				if schiff._laser_cd <= 0.0 and schiff.energie >= w.energie:
+					schiff.laser_schuss()
+					schuesse += int(w.anzahl)
+				if not foto_gemacht and Time.get_ticks_msec() - t0 > 250:
+					_foto("waffe_%s" % w.id)
+					foto_gemacht = true
+				await get_tree().physics_frame
+				schiff._laser_cd -= get_physics_process_delta_time()
+		else:
+			schiff.raketen_schuss()
+			schuesse += int(w.anzahl)
+			await _warte(0.25)
+			_foto("waffe_%s" % w.id)
+			var t0 := Time.get_ticks_msec()
+			while Time.get_ticks_msec() - t0 < 3500:
+				await get_tree().physics_frame
+				var kleine := 0
+				for k in level.get_children():
+					if k is Geschoss and k.rundum:
+						kleine += 1
+				splitter_max = maxi(splitter_max, kleine)
+		await _warte(0.6)
+		var schaden := 0.0
+		var getroffen := 0
+		for i in 3:
+			var d: float = vorher[i] - ziele[i].hp
+			schaden += d
+			if d > 0.0:
+				getroffen += 1
+		Protokoll.schreib("test", "Waffe %-14s %3d Geschosse, Schaden %6.0f, getroffene Ziele %d%s" % [
+			w.name, schuesse, schaden, getroffen, (", Splitter %d" % splitter_max) if splitter_max > 0 else ""])
+	Protokoll.schreib("test", "Schiffswerte: Schild %d / %d" % [schiff.schild, schiff.schild_max])
 
 
 ## Alle fünf Gegnertypen vor dem Schiff (Bildprüfung), danach Verhalten von Minenleger und Tarnroboter.

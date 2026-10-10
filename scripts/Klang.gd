@@ -7,12 +7,13 @@ extends Node
 const RATE := 44100
 const MAX_GLEICHZEITIG := 28
 ## Lautstärkeregler: je Regler ein Audiokanal (Bus). "gesamt" ist der Hauptkanal.
-const KANAELE := {"gesamt": "Master", "laser": "Laser", "gegner": "Gegner", "explosionen": "Explosionen"}
-const KANAL_NAMEN := {"gesamt": "Gesamt", "laser": "Eigener Laser", "gegner": "Gegnerschüsse", "explosionen": "Explosionen"}
+const KANAELE := {"gesamt": "Master", "laser": "Laser", "gegner": "Gegner", "explosionen": "Explosionen", "alarm": "Alarm"}
+const KANAL_NAMEN := {"gesamt": "Gesamt", "laser": "Eigener Laser", "gegner": "Gegnerschüsse", "explosionen": "Explosionen",
+	"alarm": "Alarm und Countdown"}
 const TON_KANAL := {"laser": "Laser", "laser_gegner": "Gegner", "einschlag": "Explosionen",
-	"explosion": "Explosionen", "explosion_gross": "Explosionen"}
+	"explosion": "Explosionen", "explosion_gross": "Explosionen", "sirene": "Alarm", "piep": "Alarm"}
 
-var lautstaerke := {"gesamt": 1.0, "laser": 1.0, "gegner": 1.0, "explosionen": 1.0}
+var lautstaerke := {"gesamt": 1.0, "laser": 1.0, "gegner": 1.0, "explosionen": 1.0, "alarm": 1.0}
 var _einstellungen := "user://abstieg_einstellungen.cfg"
 
 var toene := {}
@@ -45,11 +46,13 @@ func _ready() -> void:
 	toene["einschlag"] = _explosion(0.22, 0.55, 0.0, 30.0)
 	toene["explosion"] = _explosion(0.75, 0.35, 0.5, 6.0)
 	toene["explosion_gross"] = _explosion(2.2, 0.25, 0.9, 2.2)
+	toene["sirene"] = _sirene(1.6)
+	toene["piep"] = _piep(0.07, 1250.0)
 	Protokoll.schreib("klang", "%d Töne erzeugt in %d ms" % [toene.size(), Time.get_ticks_msec() - t0])
 
 
 ## pos == null: ohne Raum (eigener Laser). Sonst räumlich an pos.
-func spiele(name: String, pos: Variant = null, db := 0.0) -> void:
+func spiele(name: String, pos: Variant = null, db := 0.0, tonhoehe := 1.0) -> void:
 	if not toene.has(name) or _laufend >= MAX_GLEICHZEITIG:
 		return
 	zaehler[name] = int(zaehler.get(name, 0)) + 1
@@ -59,7 +62,7 @@ func spiele(name: String, pos: Variant = null, db := 0.0) -> void:
 		a.stream = toene[name]
 		a.volume_db = db
 		a.bus = TON_KANAL.get(name, "Master")
-		a.pitch_scale = _rng.randf_range(0.94, 1.06)
+		a.pitch_scale = _rng.randf_range(0.94, 1.06) * tonhoehe
 		p = a
 	else:
 		var a3 := AudioStreamPlayer3D.new()
@@ -68,7 +71,7 @@ func spiele(name: String, pos: Variant = null, db := 0.0) -> void:
 		a3.bus = TON_KANAL.get(name, "Master")
 		a3.unit_size = 12.0
 		a3.max_distance = 140.0
-		a3.pitch_scale = _rng.randf_range(0.9, 1.1)
+		a3.pitch_scale = _rng.randf_range(0.9, 1.1) * tonhoehe
 		a3.position = pos
 		p = a3
 	add_child(p)
@@ -117,6 +120,31 @@ func _laser(f0: float, f1: float, dauer: float, rechteck: float) -> AudioStreamW
 		tief += (roh - tief) * 0.35          # Rechteck etwas entschärfen
 		var huelle := minf(1.0, t * 600.0) * exp(-t * 14.0)
 		werte[i] = tief * huelle
+	return _wav(werte)
+
+
+## Auf- und abschwellender Alarmton (zwei Wellen), wie die Selbstzerstörung im Original.
+func _sirene(dauer: float) -> AudioStreamWAV:
+	var n := int(dauer * RATE)
+	var werte := PackedFloat32Array()
+	werte.resize(n)
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var f := 620.0 + 480.0 * (0.5 - 0.5 * cos(TAU * t / (dauer / 2.0)))
+		phase = fmod(phase + f / RATE, 1.0)
+		var s := sin(TAU * phase) * 0.6 + (1.0 if phase < 0.5 else -1.0) * 0.4
+		werte[i] = s * minf(1.0, t * 80.0) * minf(1.0, (dauer - t) * 20.0)
+	return _wav(werte)
+
+
+func _piep(dauer: float, f: float) -> AudioStreamWAV:
+	var n := int(dauer * RATE)
+	var werte := PackedFloat32Array()
+	werte.resize(n)
+	for i in n:
+		var t := float(i) / RATE
+		werte[i] = (1.0 if fmod(t * f, 1.0) < 0.5 else -1.0) * 0.5 * minf(1.0, (dauer - t) * 60.0)
 	return _wav(werte)
 
 

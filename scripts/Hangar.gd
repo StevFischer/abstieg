@@ -25,7 +25,7 @@ func aufbauen() -> void:
 	add_child(mitte)
 	var spalte := VBoxContainer.new()
 	spalte.add_theme_constant_override("separation", 14)
-	spalte.custom_minimum_size = Vector2(900, 0)
+	spalte.custom_minimum_size = Vector2(1500, 0)
 	mitte.add_child(spalte)
 
 	spalte.add_child(_label("ABSTIEG", 84, ORANGE, true))
@@ -33,7 +33,19 @@ func aufbauen() -> void:
 	spalte.add_child(_label("Erz in der Bank: %d     ·     Rekordtiefe: %d     ·     Läufe: %d" % [
 		Meta.bank, Meta.rekord, Meta.laeufe], 24, Color(1.0, 0.85, 0.35), true))
 	spalte.add_child(HSeparator.new())
-	spalte.add_child(_label("AUFRÜSTUNGEN — bleiben nach dem Tod", 22, ORANGE, false))
+	var zwei := HBoxContainer.new()
+	zwei.add_theme_constant_override("separation", 60)
+	spalte.add_child(zwei)
+	var links := VBoxContainer.new()
+	links.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	links.add_theme_constant_override("separation", 10)
+	zwei.add_child(links)
+	var rechts := VBoxContainer.new()
+	rechts.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rechts.add_theme_constant_override("separation", 10)
+	zwei.add_child(rechts)
+	_waffen_spalte(rechts)
+	links.add_child(_label("AUFRÜSTUNGEN — bleiben nach dem Tod", 22, ORANGE, false))
 	var erster: Button = null
 	for a in Meta.AUFRUESTUNGEN:
 		var zeile := HBoxContainer.new()
@@ -54,7 +66,7 @@ func aufbauen() -> void:
 			if Meta.kaufen(id):
 				aufbauen())
 		zeile.add_child(b)
-		spalte.add_child(zeile)
+		links.add_child(zeile)
 	spalte.add_child(HSeparator.new())
 	var los := Button.new()
 	los.text = "ABSTIEG BEGINNEN"
@@ -75,10 +87,38 @@ func aufbauen() -> void:
 	spalte.add_child(ende)
 	spalte.add_child(_label(
 		"Maus drehen · WASD fliegen · Leertaste/Strg hoch/runter · Q/E rollen · Linke Maustaste Laser · Rechte Rakete\n" +
-		"Tab Leitstrahl · F Scheinwerfer · Esc Pause\n" +
-		"Controller: linker Stick fliegen · rechter Stick drehen · LB/RB rollen · A/B hoch/runter · RT Laser · LT Rakete",
+		"1–4 Laser wählen · 5–8 Rakete wählen · Tab Leitstrahl · F Scheinwerfer · Esc Pause\n" +
+		"Controller: linker Stick fliegen · rechter Stick drehen · LB/RB rollen · A/B hoch/runter · RT Laser · LT Rakete · Steuerkreuz ←→ Laser, ↑↓ Rakete",
 		16, Color(0.6, 0.58, 0.52), true))
 	erster.call_deferred("grab_focus")
+
+
+func _waffen_spalte(rechts: VBoxContainer) -> void:
+	rechts.add_child(_label("WAFFEN — dauerhaft freischalten (Laser 1–4, Raketen 5–8)", 22, ORANGE, false))
+	var frei := Meta.waffen_frei()
+	for liste in [Waffen.LASER, Waffen.RAKETEN]:
+		for i in liste.size():
+			var w: Dictionary = liste[i]
+			var taste: int = i + 1 if liste == Waffen.LASER else i + 5
+			var zeile := HBoxContainer.new()
+			var text := _label("%d  %s  (%s)" % [taste, w.name, w.text], 20, Color(0.9, 0.88, 0.8), false)
+			text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			zeile.add_child(text)
+			var b := Button.new()
+			b.custom_minimum_size = Vector2(220, 40)
+			b.add_theme_font_size_override("font_size", 19)
+			if w.id in frei:
+				b.text = "vorhanden"
+				b.disabled = true
+			else:
+				b.text = "Kaufen · %d Erz" % w.preis
+				b.disabled = not Meta.waffe_kaufbar(w.id)
+			var id: String = w.id
+			b.pressed.connect(func():
+				if Meta.waffe_kaufen(id):
+					aufbauen())
+			zeile.add_child(b)
+			rechts.add_child(zeile)
 
 
 func _label(text: String, groesse: int, farbe: Color, zentriert: bool) -> Label:

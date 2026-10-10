@@ -15,6 +15,7 @@ var bank := 0
 var rekord := 0
 var laeufe := 0
 var stufen := {}
+var waffen: Array = []     ## freigeschaltete Waffen-IDs, zusätzlich zu Waffen.START
 
 
 func _ready() -> void:
@@ -57,9 +58,29 @@ func kaufen(id: String) -> bool:
 	return true
 
 
+func waffen_frei() -> Array:
+	var alle: Array = Waffen.START.duplicate()
+	alle.append_array(waffen)
+	return alle
+
+
+func waffe_kaufbar(id: String) -> bool:
+	return not id in waffen_frei() and bank >= int(Waffen.finde(id).preis)
+
+
+func waffe_kaufen(id: String) -> bool:
+	if not waffe_kaufbar(id):
+		return false
+	bank -= int(Waffen.finde(id).preis)
+	waffen.append(id)
+	speichern()
+	Protokoll.schreib("meta", "Waffe freigeschaltet %s, Bank jetzt %d" % [id, bank])
+	return true
+
+
 func schiffswerte() -> Dictionary:
 	return {
-		"schild_max": 100.0 + 25.0 * stufe("schild"),
+		"schild_max": 50.0 + 25.0 * stufe("schild"),
 		"huelle_max": 100.0 + 25.0 * stufe("panzerung"),
 		"laser_mult": 1.0 + 0.2 * stufe("laser"),
 		"energie_regen": 3.0 * (1.0 + 0.3 * stufe("energie")),
@@ -76,6 +97,7 @@ func laden() -> void:
 	rekord = c.get_value("meta", "rekord", 0)
 	laeufe = c.get_value("meta", "laeufe", 0)
 	stufen = c.get_value("meta", "stufen", {})
+	waffen = c.get_value("meta", "waffen", [])
 
 
 func speichern() -> void:
@@ -84,6 +106,7 @@ func speichern() -> void:
 	c.set_value("meta", "rekord", rekord)
 	c.set_value("meta", "laeufe", laeufe)
 	c.set_value("meta", "stufen", stufen)
+	c.set_value("meta", "waffen", waffen)
 	var e := c.save(_pfad)
 	if e != OK:
 		Protokoll.schreib("fehler", "Meta speichern fehlgeschlagen: %s" % error_string(e))

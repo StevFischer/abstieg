@@ -13,6 +13,7 @@ var _huelle_txt: Label
 var _schild_txt: Label
 var _energie_txt: Label
 var _raketen: Label
+var _laser: Label
 var _tiefe: Label
 var _erz: Label
 var _status: Label
@@ -49,7 +50,7 @@ func _init() -> void:
 	wurzel.add_child(_zeichnung)
 
 	var unten := VBoxContainer.new()
-	_ecke(unten, 0, 1, Vector2(30, -250), Vector2(420, -30))
+	_ecke(unten, 0, 1, Vector2(30, -285), Vector2(520, -30))
 	wurzel.add_child(unten)
 	_schild_txt = _label("SCHILD", 22, GRUEN)
 	unten.add_child(_schild_txt)
@@ -63,6 +64,8 @@ func _init() -> void:
 	unten.add_child(_energie_txt)
 	_energie = _balken(GELB)
 	unten.add_child(_energie)
+	_laser = _label("LASER", 22, Color(1.0, 0.55, 0.45))
+	unten.add_child(_laser)
 	_raketen = _label("RAKETEN 0", 22, ROT)
 	unten.add_child(_raketen)
 
@@ -139,7 +142,9 @@ func werte(s: Schiff) -> void:
 	_energie.max_value = s.energie_max
 	_energie.value = s.energie
 	_energie_txt.text = "ENERGIE %d" % int(s.energie)
-	_raketen.text = "RAKETEN %d / %d" % [s.raketen, s.raketen_max]
+	var r := Waffen.finde(s.rakete_wahl)
+	_raketen.text = "RAKETEN %d / %d  ·  %s" % [s.raketen, s.raketen_max, r.name]
+	_laser.text = "LASER  ·  %s" % Waffen.finde(s.laser_wahl).name
 	_zeichnung.queue_redraw()
 
 
@@ -183,10 +188,13 @@ func blitz(staerke: float) -> void:
 
 
 func _zeichnen() -> void:
+	# Zielkreuz: rot, mit Kreis drumherum
 	var m := _zeichnung.size / 2.0
-	var f := Color(GRUEN, 0.8)
+	var f := Color(1.0, 0.18, 0.12, 0.9)
 	for r in [Vector2(1, 0), Vector2(-1, 0), Vector2(0, 1), Vector2(0, -1)]:
-		_zeichnung.draw_line(m + r * 8.0, m + r * 20.0, f, 2.0)
+		_zeichnung.draw_line(m + r * 7.0, m + r * 30.0, f, 2.0)
+	_zeichnung.draw_arc(m, 22.0, 0.0, TAU, 48, f, 2.0, true)
+	_zeichnung.draw_circle(m, 1.6, f)
 	if not leit_an:
 		return
 	var c := Color(0.4, 1.0, 0.6, 0.9)

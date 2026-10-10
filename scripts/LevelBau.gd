@@ -134,6 +134,8 @@ static func _lichter(mine: Node3D, gen: LevelGen, thema: Dictionary, rng: Random
 		l.light_energy = 1.7
 		l.omni_attenuation = 0.8
 		l.position = oben
+		l.add_to_group("minenlicht")
+		l.set_meta("farbe", farbe)
 		mine.add_child(l)
 		var lampe := MeshInstance3D.new()
 		var box := BoxMesh.new()
@@ -152,4 +154,6 @@ static func _lichter(mine: Node3D, gen: LevelGen, thema: Dictionary, rng: Random
 			tl.omni_range = 10.0
 			tl.light_energy = 0.9
 			tl.position = LevelGen.welt_von(weg[j]) + Vector3(0, s * 0.3, 0)
+			tl.add_to_group("minenlicht")
+			tl.set_meta("farbe", tl.light_color)
 			mine.add_child(tl)
