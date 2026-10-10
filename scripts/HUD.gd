@@ -8,6 +8,8 @@ const ROT := Color(1.0, 0.3, 0.25)
 
 var _schild: ProgressBar
 var _energie: ProgressBar
+var _huelle: ProgressBar
+var _huelle_txt: Label
 var _schild_txt: Label
 var _energie_txt: Label
 var _raketen: Label
@@ -45,12 +47,16 @@ func _init() -> void:
 	wurzel.add_child(_zeichnung)
 
 	var unten := VBoxContainer.new()
-	_ecke(unten, 0, 1, Vector2(30, -190), Vector2(420, -30))
+	_ecke(unten, 0, 1, Vector2(30, -250), Vector2(420, -30))
 	wurzel.add_child(unten)
 	_schild_txt = _label("SCHILD", 22, GRUEN)
 	unten.add_child(_schild_txt)
 	_schild = _balken(Color(0.3, 0.6, 1.0))
 	unten.add_child(_schild)
+	_huelle_txt = _label("HÜLLE", 22, Color(1.0, 0.6, 0.25))
+	unten.add_child(_huelle_txt)
+	_huelle = _balken(Color(1.0, 0.55, 0.2))
+	unten.add_child(_huelle)
 	_energie_txt = _label("ENERGIE", 22, GELB)
 	unten.add_child(_energie_txt)
 	_energie = _balken(GELB)
@@ -119,7 +125,11 @@ func werte(s: Schiff) -> void:
 	_schild.max_value = s.schild_max
 	_schild.value = s.schild
 	_schild_txt.text = "SCHILD %d / %d" % [ceili(s.schild), int(s.schild_max)]
-	_schild_txt.add_theme_color_override("font_color", ROT if s.schild < s.schild_max * 0.3 else GRUEN)
+	_schild_txt.add_theme_color_override("font_color", GELB if s.schild < s.schild_max * 0.3 else GRUEN)
+	_huelle.max_value = s.huelle_max
+	_huelle.value = s.huelle
+	_huelle_txt.text = "HÜLLE %d / %d" % [ceili(s.huelle), int(s.huelle_max)]
+	_huelle_txt.add_theme_color_override("font_color", ROT if s.huelle < s.huelle_max * 0.3 else Color(1.0, 0.6, 0.25))
 	_energie.max_value = s.energie_max
 	_energie.value = s.energie
 	_energie_txt.text = "ENERGIE %d" % int(s.energie)

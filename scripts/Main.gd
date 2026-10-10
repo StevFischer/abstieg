@@ -163,7 +163,7 @@ func _gegner_setzen() -> int:
 			_gegner(pool[_rng.randi_range(0, pool.size() - 1)], pos)
 			zahl += 1
 		if _rng.randf() < 0.35:
-			var art: String = ["schild", "energie", "rakete", "erz", "erz"][_rng.randi_range(0, 4)]
+			var art: String = ["schild", "reparatur", "energie", "rakete", "erz", "erz"][_rng.randi_range(0, 5)]
 			level.add_child(Beute.neu(art, LevelGen.welt_von(zellen[_rng.randi_range(0, zellen.size() - 1)])))
 		# Wache im langen Stollen davor
 		var weg: Array = gen.raeume[i].tunnel
@@ -203,7 +203,7 @@ func _gegner_weg(g: Gegner) -> void:
 	var b := Beute.neu("erz", g.global_position, g.erz)
 	level.add_child.call_deferred(b)
 	if _rng.randf() < 0.2:
-		var art: String = ["schild", "energie", "rakete"][_rng.randi_range(0, 2)]
+		var art: String = ["schild", "reparatur", "energie", "rakete"][_rng.randi_range(0, 3)]
 		level.add_child.call_deferred(Beute.neu(art, g.global_position + Vector3(0, 1.2, 0)))
 
 
@@ -226,6 +226,7 @@ func _ausgang_erreicht() -> void:
 		tiefe, level_erz, lauf_erz, Meta.bank, countdown])
 	tiefe += 1
 	schiff.schild = minf(schiff.schild_max, schiff.schild + 30.0)
+	schiff.huelle = minf(schiff.huelle_max, schiff.huelle + 30.0)
 	call_deferred("_lade_level")
 
 
@@ -363,6 +364,14 @@ func _autotest() -> void:
 		var t := tiefe
 		await _warte(1.5)
 		_foto("tiefe%d_1_start" % t)
+		if runde == 0:
+			# Hülle sichtbar machen: 130 Schaden = Schild leer, Hülle 70
+			schiff.unverwundbar = false
+			schiff.treffer(130.0)
+			schiff.unverwundbar = true
+			Protokoll.schreib("test", "Nach 130 Schaden: Schild %.0f, Hülle %.0f" % [schiff.schild, schiff.huelle])
+			await _warte(0.6)
+			_foto("tiefe%d_0_huelle" % t)
 		# Zum Reaktor: Pfad bis kurz vor den Kern, der Autopilot würde sonst gegen ihn drücken.
 		var weg := gen.pfad(gen.naechste_zelle(schiff.global_position), gen.naechste_zelle(reaktor.global_position))
 		for z in weg:

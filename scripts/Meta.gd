@@ -4,6 +4,7 @@ extends Node
 var _pfad := "user://abstieg_meta.cfg"
 const AUFRUESTUNGEN := [
 	{"id": "schild", "name": "Schildgenerator", "text": "+25 Schild", "kosten": 40, "max": 8},
+	{"id": "panzerung", "name": "Panzerung", "text": "+25 Hülle", "kosten": 40, "max": 8},
 	{"id": "laser", "name": "Laserbündelung", "text": "+20 % Laserschaden", "kosten": 50, "max": 8},
 	{"id": "energie", "name": "Energiewandler", "text": "+30 % Energie-Nachladen", "kosten": 35, "max": 6},
 	{"id": "triebwerk", "name": "Triebwerk", "text": "+8 % Tempo", "kosten": 45, "max": 5},
@@ -59,6 +60,7 @@ func kaufen(id: String) -> bool:
 func schiffswerte() -> Dictionary:
 	return {
 		"schild_max": 100.0 + 25.0 * stufe("schild"),
+		"huelle_max": 100.0 + 25.0 * stufe("panzerung"),
 		"laser_mult": 1.0 + 0.2 * stufe("laser"),
 		"energie_regen": 3.0 * (1.0 + 0.3 * stufe("energie")),
 		"tempo": 14.0 * (1.0 + 0.08 * stufe("triebwerk")),

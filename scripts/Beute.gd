@@ -5,6 +5,7 @@ extends Area3D
 const ARTEN := {
 	"erz": {"farbe": Color(1.0, 0.8, 0.2), "menge": 5},
 	"schild": {"farbe": Color(0.3, 0.6, 1.0), "menge": 25},
+	"reparatur": {"farbe": Color(0.3, 1.0, 0.45), "menge": 30},
 	"energie": {"farbe": Color(0.85, 1.0, 0.3), "menge": 30},
 	"rakete": {"farbe": Color(1.0, 0.3, 0.3), "menge": 2},
 }

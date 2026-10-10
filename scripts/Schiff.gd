@@ -17,6 +17,10 @@ const SCHILD_LADEN := 1.5
 
 var schild_max := 100.0
 var schild := 100.0
+## Hülle: nimmt erst Schaden, wenn der Schild leer ist, und lädt sich NICHT selbst auf —
+## nur Reparatur-Fundstücke und der Tiefenwechsel bringen sie zurück.
+var huelle_max := 100.0
+var huelle := 100.0
 var energie_max := 100.0
 var energie := 100.0
 var energie_regen := 3.0
@@ -64,6 +68,8 @@ func _init() -> void:
 func werte_setzen(w: Dictionary) -> void:
 	schild_max = w.schild_max
 	schild = schild_max
+	huelle_max = w.huelle_max
+	huelle = huelle_max
 	laser_mult = w.laser_mult
 	energie_regen = w.energie_regen
 	tempo = w.tempo
@@ -151,6 +157,10 @@ func aufnehmen(art: String, menge: int) -> bool:
 			if schild >= schild_max:
 				return false
 			schild = minf(schild_max, schild + menge)
+		"reparatur":
+			if huelle >= huelle_max:
+				return false
+			huelle = minf(huelle_max, huelle + menge)
 		"energie":
 			if energie >= energie_max:
 				return false
@@ -167,10 +177,13 @@ func aufnehmen(art: String, menge: int) -> bool:
 func treffer(s: float) -> void:
 	if unverwundbar or not aktiv:
 		return
-	schild -= s
 	_seit_treffer = 0.0
-	getroffen.emit(s)
-	if schild <= 0.0:
+	schild -= s
+	if schild < 0.0:
+		huelle += schild      # was der Schild nicht abfängt, trifft die Hülle
 		schild = 0.0
+	getroffen.emit(s)
+	if huelle <= 0.0:
+		huelle = 0.0
 		aktiv = false
 		gestorben.emit()
