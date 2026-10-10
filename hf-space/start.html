@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Abstieg</title>
+<style>
+  :root { --bg: #0b0b0d; --text: #e6e2d8; --dim: #a39d90; --orange: #ff9a2e; --gelb: #ffd25a; --karte: #17171b; --rand: #2c2c33; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.5 system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 48px 16px; }
+  h1 { color: var(--orange); font-size: 56px; letter-spacing: 2px; margin: 0 0 4px; text-align: center; }
+  .unter { color: var(--dim); text-align: center; margin: 0 0 32px; }
+  .los { display: block; text-align: center; background: var(--orange); color: #1a0f00; font-weight: 700;
+         font-size: 22px; padding: 18px; border-radius: 10px; text-decoration: none; margin-bottom: 28px; }
+  .los:hover { background: var(--gelb); }
+  .reihe { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 32px; }
+  .reihe a { background: var(--karte); border: 1px solid var(--rand); border-radius: 10px; padding: 14px;
+             color: var(--text); text-decoration: none; }
+  .reihe a:hover { border-color: var(--orange); }
+  .reihe b { display: block; color: var(--gelb); }
+  .reihe span { color: var(--dim); font-size: 14px; }
+  h2 { color: var(--gelb); font-size: 20px; margin: 28px 0 8px; }
+  ul { padding-left: 20px; color: var(--dim); }
+  li { margin: 2px 0; }
+  kbd { background: var(--karte); border: 1px solid var(--rand); border-radius: 4px; padding: 0 5px; color: var(--text); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>ABSTIEG</h1>
+  <p class="unter">Endlose Minen. Zerstöre den Reaktor, entkomme, steig tiefer.</p>
+  <a class="los" href="index.html">Im Browser spielen</a>
+  <div class="reihe">
+    <a href="downloads/Abstieg-Windows.zip" download><b>Windows</b><span>ZIP · 40 MB · entpacken, Abstieg.exe starten</span></a>
+    <a href="downloads/Abstieg-Linux.zip" download><b>Linux</b><span>ZIP · 30 MB · entpacken, Abstieg.x86_64 starten</span></a>
+    <a href="downloads/Abstieg-Android.apk" download><b>Android</b><span>APK · 32 MB · Installation aus unbekannter Quelle erlauben</span></a>
+  </div>
+  <h2>Steuerung</h2>
+  <ul>
+    <li>Im Browser zuerst <b>ins Bild klicken</b>, dann steuert die Maus.</li>
+    <li><kbd>Maus</kbd> drehen · <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> fliegen · <kbd>Leertaste</kbd>/<kbd>Strg</kbd> hoch/runter · <kbd>Q</kbd>/<kbd>E</kbd> rollen</li>
+    <li>Linke Maustaste Laser · Rechte Maustaste Rakete · <kbd>1</kbd>–<kbd>8</kbd> Waffe wählen</li>
+    <li><kbd>Umschalt</kbd> Nachbrenner · <kbd>R</kbd> Notfallschild · <kbd>Tab</kbd> Leitstrahl · <kbd>F</kbd> Scheinwerfer · <kbd>Esc</kbd> Pause</li>
+    <li>Controller: linker Stick fliegen, rechter Stick drehen, RT Laser, LT Rakete.</li>
+  </ul>
+  <h2>Ablauf</h2>
+  <ul>
+    <li>Jede Tiefe: Reaktor finden (der grüne Leitstrahl zeigt den Weg) und zerstören, dann vor der Explosion zum Ausgang.</li>
+    <li>Jede fünfte Tiefe bewacht ein Boss den Reaktor.</li>
+    <li>Erz, Kristalle und Module sammeln; im Hangar zwischen den Läufen aufrüsten, forschen und die Station ausbauen.</li>
+  </ul>
+</main>
+</body>
+</html>
