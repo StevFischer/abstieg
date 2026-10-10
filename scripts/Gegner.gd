@@ -51,6 +51,10 @@ const FLANKE := ["jaeger", "tarn", "drohne"]                    ## greifen von d
 const TARN_NAH := 14.0      ## näher als das wird der Tarnroboter sichtbar
 const TARN_UNSICHTBAR := 0.93
 const RUF_WEITE := 30.0
+## Stev 2026-10-10: „die Gegner sollen mich etwas früher sehen“ — Sichtweite 55 → 70 m, dazu ein
+## Gehör: näher als GEHOER bemerken sie das Schiff auch ohne freie Sichtlinie (um die Ecke).
+const SICHT_WEITE := 70.0
+const GEHOER := 15.0
 ## Schildträger: wie schnell er sich nach dem Schiff dreht, und wie breit sein Schild schützt
 ## (Kosinus des halben Öffnungswinkels; 0,5 = ±60°). Gemessen 2026-10-10: mit 3,5 / 0,35 war er beim
 ## Umkreisen selbst mit 14 m/s 0 % der Zeit ungeschützt — praktisch unverwundbar.
@@ -260,7 +264,12 @@ func _physics_process(dt: float) -> void:
 	var dist := zum.length()
 	if _sicht_t <= 0.0:
 		_sicht_t = 0.25
-		_sicht = dist < 55.0 and _frei(ziel.global_position) and not (ziel is Schiff and ziel.getarnt())
+		var getarnt: bool = ziel is Schiff and ziel.getarnt()
+		_sicht = dist < SICHT_WEITE and _frei(ziel.global_position) and not getarnt
+		if not _sicht and not _alarm and not getarnt and dist < GEHOER:
+			_alarm = true                 # gehört, nicht gesehen: fliegt hin, schießt erst bei Sicht
+			_letzte = ziel.global_position
+			_rufen()
 	if _sicht:
 		if not _alarm:
 			_alarm = true

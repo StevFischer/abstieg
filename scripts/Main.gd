@@ -787,6 +787,10 @@ func _autotest() -> void:
 		await _gegner_schau()
 		get_tree().quit(0)
 		return
+	if "--sicht-test" in OS.get_cmdline_user_args():
+		await _sicht_test()
+		get_tree().quit(0)
+		return
 	if "--raketen-test" in OS.get_cmdline_user_args():
 		Meta.start_tiefe = 1
 		_starte_lauf()
@@ -1444,6 +1448,56 @@ func _schau3() -> void:
 	var leer := Meta.bank == 0 and Meta.rekord == 0 and Meta.laeufe == 0 and Meta.stufen.is_empty() and Meta.waffen.is_empty()
 	Protokoll.schreib("test", "Neues Spiel: nach Neuladen Bank %d, Rekord %d, Läufe %d, Stufen %s, Waffen %s → %s" % [
 		Meta.bank, Meta.rekord, Meta.laeufe, Meta.stufen, Meta.waffen, "ok" if leer else "FEHLER"])
+
+
+## Früher bemerken: Gegner hinter einer Wand in Gehörweite wird alarmiert, weiter weg nicht.
+func _sicht_test() -> void:
+	Meta.start_tiefe = 1
+	_starte_lauf()
+	await _warte(1.0)
+	schiff.unverwundbar = true
+	for g in get_tree().get_nodes_in_group("gegner"):
+		g.free()
+	await _warte(0.2)
+	var space := get_viewport().get_world_3d().direct_space_state
+	# Schiff in einen Stollen setzen, von dem aus beide Fälle (verdeckte Zelle nah und fern) existieren
+	var sp := schiff.global_position
+	var faelle := {}       # "nah" (6 m bis GEHOER-2) / "fern" (GEHOER+5 bis 30 m): verdeckte Zellmitte
+	for s in gen.zellen:
+		if gen.zellen[s] != -1:
+			continue
+		sp = gen.welt_von(s)
+		faelle = {}
+		for z in gen.zellen:
+			var p: Vector3 = gen.welt_von(z)
+			var d := p.distance_to(sp)
+			var art := "nah" if d < Gegner.GEHOER - 2.0 and d > 6.0 else ("fern" if d > Gegner.GEHOER + 5.0 and d < 30.0 else "")
+			if art == "" or faelle.has(art):
+				continue
+			if not space.intersect_ray(PhysicsRayQueryParameters3D.create(p, sp, 1)).is_empty():
+				faelle[art] = p
+		if faelle.size() == 2:
+			break
+	schiff.global_position = sp
+	schiff.velocity = Vector3.ZERO
+	await _warte(0.2)
+	sp = schiff.global_position
+	var erg := []
+	var ok := faelle.size() == 2
+	for art in ["nah", "fern"]:
+		if not faelle.has(art):
+			erg.append("%s: keine verdeckte Zelle gefunden" % art)
+			continue
+		var g := _testgegner("waechter", faelle[art], true)
+		g.tempo = 0.0
+		await _warte(0.6)
+		var d: float = g.global_position.distance_to(sp)
+		erg.append("%s %.1f m hinter Wand: Sicht %s, alarmiert %s" % [art, d, g._sicht, g._alarm])
+		ok = ok and not g._sicht and g._alarm == (art == "nah")
+		g.free()
+	erg.append("Sichtweite %.0f m (vorher 55)" % Gegner.SICHT_WEITE)
+	ok = ok and Gegner.SICHT_WEITE > 55.0
+	Protokoll.schreib("test", "Sicht: %s → %s" % ["; ".join(erg), "BESTANDEN" if ok else "FEHLGESCHLAGEN"])
 
 
 func _testgegner(typ: String, pos: Vector3, physik: bool) -> Gegner:
