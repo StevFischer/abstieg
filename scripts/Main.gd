@@ -576,6 +576,10 @@ func _autotest() -> void:
 		await _waffen_schau()
 		get_tree().quit(0)
 		return
+	if "--spielzeit-test" in OS.get_cmdline_user_args():
+		await _spielzeit_test()
+		get_tree().quit(0)
+		return
 	if "--boss-reset" in OS.get_cmdline_user_args():
 		await _boss_reset_test()
 		get_tree().quit(0)
@@ -838,6 +842,30 @@ func _waffen_schau() -> void:
 				nach += z.hp
 			zeile += "  %s %.0f" % [Waffen.MK[st], vorher - nach]
 		Protokoll.schreib("test", "Version %-14s%s" % [Waffen.finde(id).name, zeile])
+
+
+## Spielzeit: läuft hoch, übersteht Speichern+Neuladen und „Neues Spiel“; Hangar zeigt sie an.
+func _spielzeit_test() -> void:
+	var gestern := Time.get_date_string_from_unix_time(int(Time.get_unix_time_from_system()) - 86400)
+	var alt := Time.get_date_string_from_unix_time(int(Time.get_unix_time_from_system()) - 30 * 86400)
+	Meta.spielzeit = 5.0 * 3600.0                       # Vorgeschichte: 5 h insgesamt …
+	Meta.spielzeit_tage = {gestern: 1.5 * 3600.0, alt: 2.0 * 3600.0}   # … 1,5 h gestern, 2 h vor 30 Tagen
+	Meta.zuletzt = int(Time.get_unix_time_from_system()) - 86400
+	var s0 := Meta.spielzeit
+	await _warte(3.0)
+	var gelaufen := Meta.spielzeit - s0
+	Meta.speichern()
+	Meta.zuruecksetzen()
+	Meta.laden()
+	var nach := Meta.spielzeit
+	var zwei_w := Meta.spielzeit_zwei_wochen()
+	Meta.zuletzt = int(Time.get_unix_time_from_system()) - 86400
+	_zeige_hangar()
+	await _warte(0.8)
+	_foto("hangar_spielzeit")
+	var ok := gelaufen > 2.5 and gelaufen < 3.6 and nach >= s0 + 2.5 and zwei_w > 1.5 * 3600.0 and zwei_w < 1.6 * 3600.0
+	Protokoll.schreib("test", "Spielzeit: in 3 s gezählt %.1f s; nach Speichern, Neues Spiel und Neuladen %.0f s (vorher %.0f); letzte 2 Wochen %.0f s (soll ~5400, ohne den Tag vor 30 Tagen) → %s" % [
+		gelaufen, nach, s0, zwei_w, "BESTANDEN" if ok else "FEHLGESCHLAGEN"])
 
 
 ## Stevs Fall: in einer Boss-Tiefe sterben → Hangar → neuer Lauf. Die Bossanzeige darf außerhalb von

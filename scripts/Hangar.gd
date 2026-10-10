@@ -48,6 +48,10 @@ func aufbauen() -> void:
 	spalte.add_child(_label("Endlose Minen. Zerstöre den Reaktor, entkomme, steig tiefer.", 22, Color(0.8, 0.75, 0.65), true))
 	spalte.add_child(_label("Erz in der Bank: %d     ·     Rekordtiefe: %d     ·     Läufe: %d" % [
 		Meta.bank, Meta.rekord, Meta.laeufe], 24, Color(1.0, 0.85, 0.35), true))
+	# Spielzeit wie bei Steam
+	spalte.add_child(_label("Spielzeit: %s insgesamt     ·     %s in den letzten 2 Wochen     ·     zuletzt gespielt: %s" % [
+		Meta.spielzeit_text(Meta.spielzeit), Meta.spielzeit_text(Meta.spielzeit_zwei_wochen()), Meta.zuletzt_text()],
+		18, Color(0.62, 0.72, 0.85), true))
 	spalte.add_child(HSeparator.new())
 	var zwei := HBoxContainer.new()
 	zwei.add_theme_constant_override("separation", 60)

@@ -15,13 +15,72 @@ var laeufe := 0
 var stufen := {}
 var waffen: Array = []     ## freigeschaltete Waffen-IDs, zusätzlich zu Waffen.START
 var waffen_stufen := {}    ## Version je Waffe (1 = Mk I); fehlt ein Eintrag, ist es Mk I
+## Spielzeit wie bei Steam: Zeit, in der das Spiel offen ist (auch Hangar/Pause). Übersteht „Neues Spiel“.
+var spielzeit := 0.0       ## Sekunden insgesamt
+var spielzeit_tage := {}   ## "JJJJ-MM-TT" -> Sekunden, nur die letzten 14 Tage
+var zuletzt := 0           ## Unix-Zeit, zuletzt gespielt (vor dieser Sitzung — beim Laden gemerkt)
+var _letzter_tick := 0
+var _seit_speichern := 0.0
 
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS     # Spielzeit zählt auch in der Pause, wie bei Steam
 	# Der Selbsttest schreibt in eine eigene Datei, sonst landet sein Fortschritt im echten Spielstand.
 	if "--autotest" in OS.get_cmdline_user_args():
 		_pfad = "user://abstieg_meta_autotest.cfg"
 	laden()
+	_letzter_tick = Time.get_ticks_msec()
+
+
+## Echte Zeit (nicht Spieltempo) aufsummieren, alle 30 s und beim Beenden/Wegwechseln sichern.
+func _process(_dt: float) -> void:
+	var jetzt := Time.get_ticks_msec()
+	var dt := minf((jetzt - _letzter_tick) / 1000.0, 1.0)     # Hänger/Schlaf nicht mitzählen
+	_letzter_tick = jetzt
+	spielzeit += dt
+	var heute := Time.get_date_string_from_system()
+	spielzeit_tage[heute] = float(spielzeit_tage.get(heute, 0.0)) + dt
+	_seit_speichern += dt
+	if _seit_speichern >= 30.0:
+		speichern()
+
+
+func _notification(was: int) -> void:
+	if was == NOTIFICATION_WM_CLOSE_REQUEST or was == NOTIFICATION_APPLICATION_PAUSED \
+			or was == NOTIFICATION_APPLICATION_FOCUS_OUT or was == NOTIFICATION_PREDELETE:
+		if _pfad != "":
+			speichern()
+	if was == NOTIFICATION_APPLICATION_RESUMED or was == NOTIFICATION_APPLICATION_FOCUS_IN:
+		_letzter_tick = Time.get_ticks_msec()
+
+
+func spielzeit_text(sek: float) -> String:
+	if sek < 3600.0:
+		return "%d Min." % int(sek / 60.0)
+	return ("%.1f" % (sek / 3600.0)).replace(".", ",") + " Std."
+
+
+func spielzeit_zwei_wochen() -> float:
+	var grenze := Time.get_unix_time_from_system() - 14 * 86400
+	var summe := 0.0
+	for tag in spielzeit_tage:
+		if Time.get_unix_time_from_datetime_string(tag + "T23:59:59") >= grenze:
+			summe += float(spielzeit_tage[tag])
+	return summe
+
+
+func zuletzt_text() -> String:
+	if zuletzt == 0:
+		return "noch nie"
+	var tag := Time.get_date_string_from_unix_time(zuletzt)
+	var heute := Time.get_date_string_from_system()
+	var gestern := Time.get_date_string_from_unix_time(int(Time.get_unix_time_from_system()) - 86400)
+	if tag == heute:
+		return "heute"
+	if tag == gestern:
+		return "gestern"
+	var d := Time.get_datetime_dict_from_unix_time(zuletzt)
+	return "%02d.%02d.%d" % [d.day, d.month, d.year]
 
 
 func stufe(id: String) -> int:
@@ -128,6 +187,13 @@ func laden() -> void:
 	stufen = c.get_value("meta", "stufen", {})
 	waffen = c.get_value("meta", "waffen", [])
 	waffen_stufen = c.get_value("meta", "waffen_stufen", {})
+	spielzeit = c.get_value("meta", "spielzeit", 0.0)
+	spielzeit_tage = c.get_value("meta", "spielzeit_tage", {})
+	zuletzt = c.get_value("meta", "zuletzt", 0)
+	var grenze := Time.get_unix_time_from_system() - 15 * 86400
+	for tag in spielzeit_tage.keys():
+		if Time.get_unix_time_from_datetime_string(tag + "T00:00:00") < grenze:
+			spielzeit_tage.erase(tag)
 	# Laserbündelung gibt es seit 2026-10-10 nicht mehr (ersetzt durch Versionen je Waffe):
 	# gekaufte Stufen werden einmalig als Erz zurückgebucht.
 	if stufen.has("laser"):
@@ -158,6 +224,10 @@ func speichern() -> void:
 	c.set_value("meta", "stufen", stufen)
 	c.set_value("meta", "waffen", waffen)
 	c.set_value("meta", "waffen_stufen", waffen_stufen)
+	c.set_value("meta", "spielzeit", spielzeit)
+	c.set_value("meta", "spielzeit_tage", spielzeit_tage)
+	c.set_value("meta", "zuletzt", int(Time.get_unix_time_from_system()) if spielzeit > 0.0 else zuletzt)
+	_seit_speichern = 0.0
 	var e := c.save(_pfad)
 	if e != OK:
 		Protokoll.schreib("fehler", "Meta speichern fehlgeschlagen: %s" % error_string(e))
