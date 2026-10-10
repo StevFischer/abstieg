@@ -132,6 +132,7 @@ func aufbauen() -> void:
 	ende.text = "Beenden"
 	ende.custom_minimum_size = Vector2(0, 40)
 	ende.pressed.connect(func(): beenden.emit())
+	ende.visible = not OS.has_feature("web")     # im Browser beendet man mit dem Tab
 	spalte.add_child(ende)
 	# Auf dem Handy nur die Controller-Zeile: Maus und Tastatur gibt es dort nicht.
 	var tastatur := "" if OS.has_feature("android") else \

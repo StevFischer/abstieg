@@ -26,6 +26,7 @@ var leitstrahl := true
 var autotest := false
 const HANDY_SKALA := 1.4
 var _leit_t := 0.0
+var _klick_hinweis := false      ## Browser: Hinweis „ins Bild klicken“ steht gerade
 var _opt_zu_bild := -1   ## Bild, in dem die Optionen per Esc geschlossen wurden — dieselbe Esc soll nicht auch die Pause beenden
 var _leit_ziel := Vector3.ZERO
 var _leit_weg := 0.0
@@ -37,6 +38,10 @@ var _alarm_zeit := 0.0
 
 
 func _ready() -> void:
+	# Im Browser gibt es keine Systemschriften: ● ○ ★ ← → fehlen in der eingebauten Schrift (Kästchen).
+	if OS.has_feature("web"):
+		var ersatz: Font = load("res://assets/schrift/DejaVuSans.ttf")
+		ThemeDB.fallback_font.fallbacks = ThemeDB.fallback_font.fallbacks + [ersatz]
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_rng.randomize()
 	autotest = "--autotest" in OS.get_cmdline_user_args()
@@ -573,8 +578,22 @@ func _process(dt: float) -> void:
 	if boss != null and is_instance_valid(boss):
 		hud.boss_wert(boss.hp, boss.hp_max)
 	_leitstrahl(dt)
+	if OS.has_feature("web"):
+		var frei := Input.mouse_mode != Input.MOUSE_MODE_CAPTURED
+		if frei:
+			hud.status("Ins Bild klicken, um mit der Maus zu steuern")
+		elif _klick_hinweis and countdown < 0.0:
+			hud.status("" if reaktor.kaputt else "Ziel: Reaktor zerstören")
+		_klick_hinweis = frei
 	_radar()
 	hud.werte(schiff)
+
+
+## Browser: Die Maus lässt sich nur nach einem Klick einfangen (Pointer Lock). Ein Klick ins Bild holt sie.
+func _input(e: InputEvent) -> void:
+	if OS.has_feature("web") and e is InputEventMouseButton and e.pressed and zustand == "flug" \
+			and not get_tree().paused and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
 ## Selbstzerstörung läuft: Minenlicht pulsiert rot, Countdown piept (letzte 10 s doppelt so schnell, höher).
