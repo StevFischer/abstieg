@@ -351,7 +351,9 @@ func _zeichnen() -> void:
 		var nb_farbe := GELB if nachbrenner == "NACHBRENNER" else (GRUEN if nachbrenner.ends_with("bereit") else Color(0.6, 0.6, 0.6))
 		_zeichnung.draw_string(ThemeDB.fallback_font, m + Vector2(-120, 120), nachbrenner,
 			HORIZONTAL_ALIGNMENT_CENTER, 240, 16, nb_farbe)
-	if not leit_an:
+	if not leit_an:      # Stev 2026-10-10: Markierung „verschwunden“ — sagen, dass sie nur ausgeschaltet ist
+		_zeichnung.draw_string(ThemeDB.fallback_font, m + Vector2(-160, 145), "Leitstrahl aus — Tab / Select",
+			HORIZONTAL_ALIGNMENT_CENTER, 320, 15, Color(0.6, 0.75, 0.65, 0.8))
 		return
 	var c := Color(0.4, 1.0, 0.6, 0.9)
 	if leit_rand:

@@ -38,6 +38,27 @@ const TYPEN := {
 		"farbe": Color(0.3, 0.3, 0.3), "auge": Color(1.0, 0.85, 0.2), "erz": 10},
 	"reparierer": {"hp": 60.0, "schaden": 0.0, "cd": 0.0, "schuss": 0.0, "tempo": 7.0, "abstand": 22.0, "radius": 1.1,
 		"farbe": Color(0.85, 0.85, 0.85), "auge": Color(0.3, 1.0, 0.4), "erz": 12},
+	# Stev 2026-10-10: „Mehr verschiedene Arten von Gegner Nahkampf, getarnt (nur etwas sichtbar)“
+	"saeger": {"hp": 45.0, "schaden": 18.0, "cd": 0.0, "schuss": 0.0, "tempo": 13.0, "abstand": 0.0, "radius": 1.0,
+		"farbe": Color(0.5, 0.35, 0.12), "auge": Color(1.0, 0.7, 0.1), "erz": 6},
+	"rammbock": {"hp": 150.0, "schaden": 32.0, "cd": 3.0, "schuss": 0.0, "tempo": 4.0, "abstand": 16.0, "radius": 1.5,
+		"farbe": Color(0.4, 0.3, 0.25), "auge": Color(1.0, 0.35, 0.1), "erz": 14},
+	"greifer": {"hp": 90.0, "schaden": 12.0, "cd": 4.0, "schuss": 0.0, "tempo": 5.0, "abstand": 14.0, "radius": 1.2,
+		"farbe": Color(0.32, 0.2, 0.4), "auge": Color(0.8, 0.4, 1.0), "erz": 12},
+	"lauerer": {"hp": 50.0, "schaden": 20.0, "cd": 1.2, "schuss": 0.0, "tempo": 9.0, "abstand": 8.0, "radius": 1.0,
+		"farbe": Color(0.2, 0.24, 0.2), "auge": Color(0.6, 1.0, 0.3), "erz": 12},
+	"netzwerfer": {"hp": 60.0, "schaden": 5.0, "cd": 3.5, "schuss": 14.0, "tempo": 5.0, "abstand": 16.0, "radius": 1.2,
+		"farbe": Color(0.25, 0.42, 0.42), "auge": Color(0.5, 1.0, 0.9), "erz": 10},
+	"stoerer": {"hp": 55.0, "schaden": 9.0, "cd": 1.8, "schuss": 17.0, "tempo": 6.0, "abstand": 14.0, "radius": 1.1,
+		"farbe": Color(0.2, 0.28, 0.5), "auge": Color(0.5, 0.75, 1.0), "erz": 10},
+	"scharfschuetze": {"hp": 40.0, "schaden": 28.0, "cd": 4.0, "schuss": 70.0, "tempo": 4.0, "abstand": 35.0, "radius": 1.0,
+		"farbe": Color(0.3, 0.3, 0.24), "auge": Color(1.0, 0.15, 0.1), "erz": 12},
+	"splitter": {"hp": 70.0, "schaden": 7.0, "cd": 1.5, "schuss": 15.0, "tempo": 6.0, "abstand": 10.0, "radius": 1.2,
+		"farbe": Color(0.45, 0.25, 0.12), "auge": Color(1.0, 0.55, 0.2), "erz": 8},
+	"splitterteil": {"hp": 14.0, "schaden": 5.0, "cd": 1.0, "schuss": 16.0, "tempo": 13.0, "abstand": 7.0, "radius": 0.55,
+		"farbe": Color(0.45, 0.25, 0.12), "auge": Color(1.0, 0.55, 0.2), "erz": 1},
+	"nest": {"hp": 220.0, "schaden": 0.0, "cd": 0.0, "schuss": 0.0, "tempo": 0.0, "abstand": 0.0, "radius": 1.6,
+		"farbe": Color(0.4, 0.32, 0.12), "auge": Color(1.0, 0.6, 0.1), "erz": 20},
 	"boss_koloss": {"hp": 1500.0, "schaden": 14.0, "cd": 2.0, "schuss": 18.0, "tempo": 2.5, "abstand": 14.0, "radius": 3.2,
 		"farbe": Color(0.45, 0.18, 0.12), "auge": Color(1.0, 0.3, 0.1), "erz": 150, "name": "KOLOSS"},
 	"boss_brutmutter": {"hp": 1200.0, "schaden": 22.0, "cd": 2.2, "schuss": 14.0, "tempo": 1.5, "abstand": 16.0, "radius": 2.8,
@@ -46,8 +67,24 @@ const TYPEN := {
 		"farbe": Color(0.22, 0.18, 0.35), "auge": Color(0.9, 0.3, 1.0), "erz": 150, "name": "PHANTOM"},
 }
 const BOSSE := ["boss_koloss", "boss_brutmutter", "boss_phantom"]
-const WENDIG := ["jaeger", "tarn", "teleporter", "dieb"]       ## weichen Schüssen aus
-const FLANKE := ["jaeger", "tarn", "drohne"]                    ## greifen von der Seite an
+const WENDIG := ["jaeger", "tarn", "teleporter", "dieb", "splitterteil"]       ## weichen Schüssen aus
+const FLANKE := ["jaeger", "tarn", "drohne", "splitterteil"]                    ## greifen von der Seite an
+const AN_WAND := ["lauerer", "nest"]        ## setzen sich zu Beginn an die nächste Wand
+const SAEGE_NAH := 2.8          ## Säger: so nah sägt er …
+const SAEGE_DAUER := 1.0        ## … so lange, dann prallt er ab
+const RAMM_TEMPO := 24.0        ## Rammbock: Sturmlauf
+const RAMM_ANLAUF := 0.8
+const BETAEUBT := 2.0           ## nach dem Aufprall an der Wand
+const ZUG_KRAFT := 14.0         ## Greifer: Traktorstrahl (m/s²), mit vollem Gegenschub entkommt man
+const ZUG_WEITE := 22.0
+const ZUG_DAUER := 2.5
+const LAUER_NAH := 12.0         ## Lauerer bemerkt das Schiff erst so nah
+const LAUER_SPRUNG := 20.0
+const LAUER_SICHTBAR := 0.7     ## Grund-Durchsichtigkeit (flimmernder Umriss), Stev: „nur etwas sichtbar“
+const ZIEL_LADEN := 1.5         ## Scharfschütze: Zielstrahl lädt so lange …
+const ZIEL_NACHFUEHRUNG := 6.0  ## … und folgt dem Schiff nur mit 6 m/s — seitlich ausweichen klappt
+const NEST_MAX := 6
+const NEST_TAKT := 6.0
 const TARN_NAH := 14.0      ## näher als das wird der Tarnroboter sichtbar
 const TARN_UNSICHTBAR := 0.93
 const RUF_WEITE := 30.0
@@ -113,7 +150,13 @@ var _tarn := 0.0            ## 0 = voll sichtbar, TARN_UNSICHTBAR = fast weg
 var _enttarnt_t := 0.0
 var _ausweich_cd := 0.0
 var _flanke := 0.0
-var _strahl: MeshInstance3D     ## Reparierer: Heilstrahl
+var _strahl: MeshInstance3D     ## Reparierer: Heilstrahl; Greifer: Traktorstrahl; Scharfschütze: Zielstrahl
+var _modus := ""                ## Zustand der neuen Arten (ruecksprung, anlauf, ramme, betaeubt, zug, sprung, laden)
+var _phase_t := 0.0
+var _ramm_dir := Vector3.ZERO
+var _zielpunkt := Vector3.ZERO
+var _an_wand := false
+static var gesplittert := 0     ## für Test und Log
 var _geheilt := 0.0
 
 
@@ -221,7 +264,11 @@ func _materialien(d: Dictionary) -> Dictionary:
 
 func _process(dt: float) -> void:
 	if _rotor:
-		_rotor.rotate_object_local(Vector3.UP, dt * 2.5)
+		_rotor.rotate_object_local(Vector3.UP, dt * (25.0 if typ == "saeger" else 2.5))
+	if typ == "lauerer":       # flimmernder Umriss; beim Angriff kurz ganz sichtbar
+		_enttarnt_t -= dt
+		_tarn = 0.0 if _enttarnt_t > 0.0 else clampf(LAUER_SICHTBAR + 0.12 * sin(_zeit * 31.0) * sin(_zeit * 7.3), 0.0, 0.95)
+		_tarnung_anwenden()
 	if typ == "tarn" or (typ == "boss_phantom" and phase == 2):
 		_enttarnt_t -= dt
 		var nah := ziel != null and is_instance_valid(ziel) and global_position.distance_to(ziel.global_position) < TARN_NAH
@@ -262,11 +309,18 @@ func _physics_process(dt: float) -> void:
 	_ausweich_cd -= dt
 	var zum := ziel.global_position - global_position
 	var dist := zum.length()
+	if typ in AN_WAND and not _an_wand:      # vor der ersten Sichtprüfung an die Wand
+		_an_wand = true
+		if not _alarm:
+			_an_wand_setzen()
+			zum = ziel.global_position - global_position
+			dist = zum.length()
 	if _sicht_t <= 0.0:
 		_sicht_t = 0.25
 		var getarnt: bool = ziel is Schiff and ziel.getarnt()
-		_sicht = dist < SICHT_WEITE and _frei(ziel.global_position) and not getarnt
-		if not _sicht and not _alarm and not getarnt and dist < GEHOER:
+		var weite := LAUER_NAH if (typ == "lauerer" and not _alarm) else SICHT_WEITE
+		_sicht = dist < weite and _frei(ziel.global_position) and not getarnt
+		if not _sicht and not _alarm and not getarnt and dist < minf(GEHOER, weite):
 			_alarm = true                 # gehört, nicht gesehen: fliegt hin, schießt erst bei Sicht
 			_letzte = ziel.global_position
 			_rufen()
@@ -275,7 +329,7 @@ func _physics_process(dt: float) -> void:
 			_alarm = true
 			_rufen()
 		_letzte = ziel.global_position
-	var soll_v := Vector3(0, sin(_zeit * 1.7) * 0.4, 0)
+	var soll_v := Vector3.ZERO if typ in AN_WAND else Vector3(0, sin(_zeit * 1.7) * 0.4, 0)
 	if ist_boss and gen != null and _alarm:
 		_ohne_sicht = 0.0 if _sicht else _ohne_sicht + dt
 		if _ohne_sicht > JAGD_NACH:
@@ -291,6 +345,12 @@ func _physics_process(dt: float) -> void:
 			"teleporter": soll_v = _verhalten_teleporter(zum, dist, dt)
 			"dieb": soll_v = _verhalten_dieb(zum, dist, dt)
 			"reparierer": soll_v = _verhalten_reparierer(zum, dist, dt)
+			"saeger": soll_v = _verhalten_saeger(zum, dist, dt)
+			"rammbock": soll_v = _verhalten_rammbock(zum, dist, dt)
+			"greifer": soll_v = _verhalten_greifer(zum, dist, dt)
+			"lauerer": soll_v = _verhalten_lauerer(zum, dist, dt)
+			"scharfschuetze": soll_v = _verhalten_scharfschuetze(zum, dist, dt)
+			"nest": soll_v = _verhalten_nest(zum, dist, dt)
 			"boss_koloss": soll_v = _verhalten_koloss(zum, dist, dt)
 			"boss_brutmutter": soll_v = _verhalten_brutmutter(zum, dist, dt)
 			"boss_phantom": soll_v = _verhalten_phantom(zum, dist, dt)
@@ -501,7 +561,10 @@ func _strahl_zeigen(nach: Vector3) -> void:
 		z.radial_segments = 6
 		var m := StandardMaterial3D.new()
 		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		m.albedo_color = Color(0.6, 3.0, 0.9)
+		m.albedo_color = {"greifer": Color(1.6, 0.6, 3.0), "scharfschuetze": Color(3.0, 0.3, 0.2)}.get(typ, Color(0.6, 3.0, 0.9))
+		if typ == "scharfschuetze":
+			z.top_radius = 0.03
+			z.bottom_radius = 0.03
 		z.material = m
 		_strahl.mesh = z
 		_strahl.top_level = true
@@ -511,6 +574,214 @@ func _strahl_zeigen(nach: Vector3) -> void:
 	var r := nach - global_position
 	_strahl.global_position = mitte
 	_strahl.global_basis = Basis(Quaternion(Vector3.UP, r.normalized())).scaled(Vector3(1, r.length(), 1))
+
+
+# --- Neue Arten (2026-10-10) ------------------------------------------------------
+
+## Säger: rammt das Schiff, sägt SAEGE_DAUER lang (Schaden je Sekunde), prallt ab und setzt neu an.
+func _verhalten_saeger(zum: Vector3, dist: float, dt: float) -> Vector3:
+	var hin := ziel.global_position if _sicht else _letzte
+	_drehen_zu(hin, dt * 2.0)
+	if _modus == "ruecksprung":
+		_phase_t -= dt
+		if _phase_t <= 0.0:
+			_modus = ""
+		return -zum.normalized() * tempo * 0.8
+	if _sicht and dist < SAEGE_NAH:
+		_phase_t += dt
+		if _cd <= 0.0:
+			ziel.treffer(schaden * 0.2)
+			_cd = 0.2
+		if _phase_t > SAEGE_DAUER:
+			_modus = "ruecksprung"
+			_phase_t = 0.8
+			velocity = -zum.normalized() * tempo
+		return zum.normalized() * 2.0
+	_phase_t = 0.0
+	return (hin - global_position).normalized() * tempo
+
+
+## Rammbock: hält Abstand, nimmt Anlauf (Auge blinkt), rast geradeaus. Trifft er das Schiff: harter Stoß;
+## trifft er die Wand: BETAEUBT Sekunden betäubt. Die Front blockt Schüsse (siehe treffer_von).
+func _verhalten_rammbock(zum: Vector3, dist: float, dt: float) -> Vector3:
+	match _modus:
+		"anlauf":
+			_phase_t -= dt
+			_drehen_zu(ziel.global_position, dt * 1.5)
+			_blitz.albedo_color = Color(1, 0.3, 0.1, 0.5 * maxf(0.0, sin(_zeit * 30.0)))
+			if _phase_t <= 0.0:
+				_modus = "ramme"
+				_ramm_dir = -global_basis.z
+				_phase_t = 1.6
+				_blitz.albedo_color.a = 0.0
+			return Vector3.ZERO
+		"ramme":
+			_phase_t -= dt
+			if dist < _radius_voll + 1.6:
+				ziel.treffer(schaden)
+				if ziel is CharacterBody3D:
+					ziel.velocity += _ramm_dir * 16.0
+				_modus = ""
+				_cd = cd_basis
+				velocity = -_ramm_dir * 3.0
+				return Vector3.ZERO
+			for i in get_slide_collision_count():
+				if not get_slide_collision(i).get_collider() is CharacterBody3D:
+					_modus = "betaeubt"
+					_phase_t = BETAEUBT
+					velocity = Vector3.ZERO
+					Effekte.explosion(get_parent(), global_position - global_basis.z * 1.6, Color(1, 0.7, 0.3), 2.0)
+					return Vector3.ZERO
+			if _phase_t <= 0.0:
+				_modus = ""
+				_cd = cd_basis
+			velocity = _ramm_dir * RAMM_TEMPO
+			return velocity
+		"betaeubt":
+			_phase_t -= dt
+			if _phase_t <= 0.0:
+				_modus = ""
+				_cd = cd_basis * 0.5
+			return Vector3.ZERO
+	_drehen_zu(ziel.global_position if _sicht else _letzte, dt)
+	if _sicht and _cd <= 0.0 and dist < 35.0 and _zielt_auf(zum, dist, 0.9):
+		_modus = "anlauf"
+		_phase_t = RAMM_ANLAUF
+	return _verfolgen(zum, dist)
+
+
+func ist_betaeubt() -> bool:
+	return _modus == "betaeubt"
+
+
+## Greifer: Traktorstrahl zieht das Schiff heran; aus der Nähe schlagen die Zangen zu.
+func _verhalten_greifer(zum: Vector3, dist: float, dt: float) -> Vector3:
+	_drehen_zu(ziel.global_position if _sicht else _letzte, dt)
+	var v := _verfolgen(zum, dist)
+	if _modus == "zug":
+		_phase_t -= dt
+		if not _sicht or _phase_t <= 0.0 or dist > ZUG_WEITE + 4.0:
+			_modus = ""
+			_cd = cd_basis
+			_strahl_zeigen(Vector3.INF)
+		else:
+			if ziel.has_method("ziehen"):
+				ziel.ziehen(-zum.normalized() * ZUG_KRAFT)
+			_strahl_zeigen(ziel.global_position)
+			v = Vector3.ZERO
+	elif _sicht and _cd <= 0.0 and dist < ZUG_WEITE:
+		_modus = "zug"
+		_phase_t = ZUG_DAUER
+	if _sicht and dist < 3.4 and _spezial_t <= 0.0:
+		ziel.treffer(schaden)
+		_spezial_t = 0.8
+	return v
+
+
+## Lauerer: klebt getarnt an der Wand, bemerkt das Schiff erst in LAUER_NAH, springt es an,
+## schlägt zu, weicht zurück und setzt erneut an. Beim Angriff kurz voll sichtbar.
+func _verhalten_lauerer(zum: Vector3, dist: float, dt: float) -> Vector3:
+	var hin := ziel.global_position if _sicht else _letzte
+	_drehen_zu(hin, dt * 3.0)
+	match _modus:
+		"sprung":
+			_phase_t -= dt
+			if dist < 2.4:
+				ziel.treffer(schaden)
+				_modus = "rueck"
+				_phase_t = 1.0
+				_enttarnt_t = 1.5
+				return -zum.normalized() * tempo
+			if _phase_t <= 0.0:
+				_modus = "rueck"
+				_phase_t = 0.6
+			velocity = (hin - global_position).normalized() * LAUER_SPRUNG
+			return velocity
+		"rueck":
+			_phase_t -= dt
+			if _phase_t <= 0.0:
+				_modus = ""
+				_cd = cd_basis
+			return -zum.normalized() * tempo
+	if _sicht and _cd <= 0.0 and dist < 14.0:
+		_modus = "sprung"
+		_phase_t = 1.2
+		_enttarnt_t = 1.5
+	return _verfolgen(zum, dist)
+
+
+## Scharfschütze: hält großen Abstand, lädt einen sichtbaren Zielstrahl, der dem Schiff nur langsam
+## folgt, und feuert dann einen schnellen, harten Schuss dorthin.
+func _verhalten_scharfschuetze(zum: Vector3, dist: float, dt: float) -> Vector3:
+	_drehen_zu(ziel.global_position if _sicht else _letzte, dt)
+	if _modus == "laden":
+		if not _sicht:
+			_modus = ""
+			_strahl_zeigen(Vector3.INF)
+			return _verfolgen(zum, dist)
+		_phase_t -= dt
+		_zielpunkt = _zielpunkt.move_toward(ziel.global_position, ZIEL_NACHFUEHRUNG * dt)
+		_strahl_zeigen(_zielpunkt)
+		if _phase_t <= 0.0:
+			var start := global_position - global_basis.z * 2.3
+			welt.add_child(Geschoss.neu(start, (_zielpunkt - start).normalized(), schuss_tempo, schaden, false, _auge, 0.0, 1.8))
+			Effekte.ton("laser_gegner", start, 4.0)
+			_modus = ""
+			_cd = cd_basis
+			_strahl_zeigen(Vector3.INF)
+		return Vector3.ZERO
+	if _sicht and _cd <= 0.0 and dist < 60.0:
+		_modus = "laden"
+		_phase_t = ZIEL_LADEN
+		_zielpunkt = ziel.global_position
+	return _verfolgen(zum, dist)
+
+
+func zielt_gerade() -> bool:
+	return _modus == "laden"
+
+
+## Schwarmnest: sitzt an der Wand und erzeugt alle NEST_TAKT Sekunden zwei Drohnen (höchstens NEST_MAX).
+func _verhalten_nest(_zum: Vector3, _dist: float, _dt: float) -> Vector3:
+	if _spezial_t <= 0.0:
+		_spezial_t = NEST_TAKT
+		if nest_kinder() < NEST_MAX:
+			for i in 2:
+				var r := (-global_basis.z + Vector3(randf() - 0.5, randf() - 0.5, randf() - 0.5) * 0.8).normalized()
+				verstaerkung.emit("drohne", global_position + r * 2.8, self)
+			_blitz.albedo_color = Color(1, 0.6, 0.1, 0.6)
+			create_tween().tween_property(_blitz, "albedo_color:a", 0.0, 0.4)
+	return Vector3.ZERO
+
+
+func nest_kinder() -> int:
+	var n := 0
+	for g in get_tree().get_nodes_in_group("gegner"):
+		if g.get_meta("nest", 0) == get_instance_id():
+			n += 1
+	return n
+
+
+## Lauerer und Nest: an die nächste Wand setzen, Front von der Wand weg.
+func _an_wand_setzen() -> void:
+	var raum := get_world_3d().direct_space_state
+	var beste := {}
+	var best_d := 12.0
+	for r in [Vector3.UP, Vector3.DOWN, Vector3.LEFT, Vector3.RIGHT, Vector3.FORWARD, Vector3.BACK,
+			Vector3(1, 1, 0), Vector3(-1, 1, 0), Vector3(0, 1, 1), Vector3(0, 1, -1)]:
+		var q := PhysicsRayQueryParameters3D.create(global_position, global_position + r.normalized() * 12.0, 1)
+		var t := raum.intersect_ray(q)
+		if not t.is_empty():
+			var d: float = global_position.distance_to(t.position)
+			if d < best_d:
+				best_d = d
+				beste = t
+	if beste.is_empty():
+		return
+	var n: Vector3 = beste.normal
+	global_position = beste.position + n * (_radius_voll + 0.15)
+	var oben := Vector3.UP if absf(n.y) < 0.95 else Vector3.FORWARD
+	global_basis = Basis.looking_at(n, oben)
 
 
 # --- Bosse -------------------------------------------------------------------
@@ -636,7 +907,7 @@ func _drehen_zu(p: Vector3, dt: float) -> void:
 		return
 	vor = vor.normalized()
 	var oben := Vector3.UP if absf(vor.y) < 0.95 else Vector3.FORWARD
-	var rate := 2.0 if typ == "geschuetz" else (schild_drehung if typ == "schildtraeger" else 3.5)
+	var rate := 2.0 if typ == "geschuetz" else (schild_drehung if typ == "schildtraeger" else (1.5 if typ == "rammbock" else 3.5))
 	global_basis = global_basis.slerp(Basis.looking_at(vor, oben), minf(1.0, rate * dt)).orthonormalized()
 
 
@@ -646,7 +917,10 @@ func _schiessen() -> void:
 	var start := global_position - global_basis.z * 1.4
 	var richtung := (ziel.global_position - start).normalized()
 	richtung = (richtung + Vector3(randf() - 0.5, randf() - 0.5, randf() - 0.5) * 0.06).normalized()
-	welt.add_child(Geschoss.neu(start, richtung, schuss_tempo, schaden, false, _auge))
+	var g := Geschoss.neu(start, richtung, schuss_tempo, schaden, false, _auge, 0.0,
+		{"netzwerfer": 2.4, "stoerer": 1.5}.get(typ, 1.0))
+	g.wirkung = {"netzwerfer": "netz", "stoerer": "emp"}.get(typ, "")
+	welt.add_child(g)
 	Effekte.ton("laser_gegner", start, -4.0)
 	if typ == "tarn":
 		_enttarnt_t = 2.0      # wer schießt, verrät sich
@@ -677,6 +951,10 @@ func treffer_von(s: float, richtung: Vector3) -> bool:
 		Effekte.explosion(get_parent(), global_position - global_basis.z * 1.2, Color(0.4, 0.7, 1.0), 1.0)
 		Effekte.schadenszahl(get_parent(), global_position - global_basis.z * 1.2, "BLOCK", 0.0, true)
 		return false
+	if typ == "rammbock" and not _tot and _modus != "betaeubt" and (-global_basis.z).dot(-richtung.normalized()) > 0.5:
+		Effekte.explosion(get_parent(), global_position - global_basis.z * 1.4, Color(1.0, 0.6, 0.3), 1.0)
+		Effekte.schadenszahl(get_parent(), global_position - global_basis.z * 1.4, "BLOCK", 0.0, true)
+		return false
 	treffer(s)
 	return true
 
@@ -703,6 +981,11 @@ func treffer(s: float) -> void:
 func _sterben() -> void:
 	_tot = true
 	remove_from_group("ziele")
+	if typ == "splitter":
+		gesplittert += 1
+		for i in 3:
+			var a := TAU * i / 3.0
+			verstaerkung.emit("splitterteil", global_position + (global_basis.x * cos(a) + global_basis.y * sin(a)) * 1.2, self)
 	Effekte.explosion(get_parent(), global_position, Color(1.0, 0.6, 0.2), 9.0 if ist_boss else 3.5)
 	zerstoert.emit(self)
 	queue_free()

@@ -1,4 +1,4 @@
-"""Baut die fünf Gegnerroboter in Blender und exportiert je ein GLB.
+"""Baut die Gegnerroboter in Blender und exportiert je ein GLB.
 
 Aufruf (ohne Fenster):
     blender -b --factory-startup --python tools/modelle_bauen.py -- assets/gegner [vorschau.png]
@@ -401,10 +401,162 @@ def boss_phantom():
     return w
 
 
+
+# ================================================================ Neue Arten (Stev 2026-10-10)
+# ---------------------------------------------------------------- Säger: Nahkampf mit Kreissäge vorn
+def saeger():
+    w = wurzel("saeger")
+    box(w, "Rumpf", (0.9, 1.3, 0.6), (0, -0.2, 0), verjuengt=(0.75, 0.8), fase=0.08)
+    box(w, "Haube", (0.6, 0.7, 0.2), (0, -0.25, 0.38), fase=0.05)
+    zyl(w, "Achse", 0.12, 0.5, (0, 0.62, 0), m="Rahmen", ecken=10)
+    zyl(w, "Rotor", 0.85, 0.06, (0, 0.95, 0.0), m="Rahmen", ecken=14, fase=0.0)
+    zyl(w, "Saegekante", 0.9, 0.03, (0, 0.95, 0.0), m="Leuchte", ecken=14, fase=0.0)
+    kugel(w, "Auge", 0.11, (0, 0.38, 0.33), seg=10, ringe=6)
+    for s in (1, -1):
+        box(w, f"Schutz{s}", (0.08, 0.7, 0.35), (s * 0.5, 0.35, 0.05), rot=(0, 0, s * -15), m="Panzer", fase=0.02)
+        zyl(w, f"Duese{s}", 0.14, 0.06, (s * 0.25, -0.88, 0), rot=(90, 0, 0), m="Duese", fase=0, ecken=10)
+    return w
+
+
+# ---------------------------------------------------------------- Rammbock: Panzerfront, rast geradeaus
+def rammbock():
+    w = wurzel("rammbock")
+    box(w, "Rumpf", (1.4, 2.0, 1.1), (0, -0.3, 0), fase=0.12)
+    box(w, "Rammplatte", (1.9, 0.35, 1.5), (0, 0.85, 0), m="Rahmen", verjuengt=(0.8, 0.8), fase=0.08)
+    for i, (x, z) in enumerate([(-0.55, 0.4), (0.55, 0.4), (-0.55, -0.4), (0.55, -0.4), (0, 0)]):
+        zyl(w, f"Dorn{i}", 0.13, 0.5, (x, 1.25, z), rot=(-90, 0, 0), m="Rahmen", r2=0.0, ecken=8)
+    box(w, "Sehschlitz", (0.8, 0.06, 0.12), (0, 1.03, 0.45), m="Leuchte", fase=0)
+    for s in (1, -1):
+        box(w, f"Flanke{s}", (0.15, 1.6, 0.9), (s * 0.75, -0.35, 0), fase=0.04)
+        zyl(w, f"Triebwerk{s}", 0.32, 0.6, (s * 0.45, -1.45, 0), rot=(90, 0, 0), m="Rahmen")
+        zyl(w, f"Duese{s}", 0.26, 0.06, (s * 0.45, -1.77, 0), rot=(90, 0, 0), m="Duese", fase=0)
+    return w
+
+
+# ---------------------------------------------------------------- Greifer: Traktorstrahl und Zangen
+def greifer():
+    w = wurzel("greifer")
+    kugel(w, "Koerper", 0.75, (0, -0.1, 0), m="Panzer", seg=16, ringe=10, streck=(1, 1.15, 0.85))
+    zyl(w, "Projektor", 0.32, 0.25, (0, 0.72, 0), rot=(-90, 0, 0), m="Rahmen", r2=0.42)
+    kugel(w, "Linse", 0.24, (0, 0.82, 0), seg=12, ringe=6)
+    for s in (1, -1):
+        box(w, f"Oberarm{s}", (0.14, 0.9, 0.14), (s * 0.75, 0.45, 0), rot=(0, 0, s * -25), m="Rahmen", fase=0.02)
+        box(w, f"Zange{s}a", (0.1, 0.6, 0.1), (s * 0.85, 1.05, 0.12), rot=(10, 0, s * 25), m="Panzer", fase=0.02)
+        box(w, f"Zange{s}b", (0.1, 0.6, 0.1), (s * 0.85, 1.05, -0.12), rot=(-10, 0, s * 25), m="Panzer", fase=0.02)
+        zyl(w, f"Duese{s}", 0.12, 0.05, (s * 0.3, -0.95, 0), rot=(90, 0, 0), m="Duese", fase=0)
+    return w
+
+
+# ---------------------------------------------------------------- Lauerer: Spinne an der Wand, getarnt
+def lauerer():
+    w = wurzel("lauerer")
+    kugel(w, "Koerper", 0.55, (0, -0.15, 0), m="Panzer", seg=12, ringe=8, streck=(1, 1.3, 0.55))
+    kugel(w, "Kopf", 0.3, (0, 0.55, 0.02), m="Panzer", seg=10, ringe=6, streck=(1, 0.9, 0.7))
+    for i, (x, z) in enumerate([(0.1, 0.1), (-0.1, 0.1), (0.13, -0.02), (-0.13, -0.02)]):
+        kugel(w, f"Auge{i}", 0.06, (x, 0.78, z + 0.05), seg=8, ringe=4)
+    for s in (1, -1):
+        for j, y in enumerate((0.3, 0.0, -0.35)):
+            box(w, f"Bein{s}{j}", (0.9, 0.07, 0.07), (s * 0.7, y, 0.12), rot=(0, s * 25, (j - 1) * s * 20), m="Rahmen", fase=0)
+            box(w, f"Fuss{s}{j}", (0.07, 0.07, 0.55), (s * 1.12, y + (j - 1) * 0.12, -0.12), rot=(0, s * -15, 0), m="Rahmen", fase=0)
+        box(w, f"Klaue{s}", (0.07, 0.5, 0.07), (s * 0.2, 0.85, -0.1), rot=(20, 0, s * 20), m="Leuchte", fase=0)
+    return w
+
+
+# ---------------------------------------------------------------- Netzwerfer: breites Rohr, Netztrommel
+def netzwerfer():
+    w = wurzel("netzwerfer")
+    box(w, "Rumpf", (1.1, 1.3, 0.8), (0, -0.2, 0), fase=0.1)
+    zyl(w, "Rohr", 0.38, 0.9, (0, 0.65, 0), rot=(-90, 0, 0), m="Rahmen", r2=0.5)
+    ring(w, "Muendung", 0.5, 0.06, (0, 1.1, 0), rot=(90, 0, 0), m="Leuchte")
+    zyl(w, "Trommel", 0.42, 0.5, (0, -0.25, 0.6), rot=(0, 90, 0), m="Mine", ecken=12)
+    for i in range(6):
+        a = R(i * 60)
+        box(w, f"Netzfaden{i}", (0.03, 0.5, 0.03), (math.cos(a) * 0.43, -0.25, 0.6 + math.sin(a) * 0.43), m="Rahmen", fase=0)
+    kugel(w, "Auge", 0.1, (0.35, 0.45, 0.35), seg=8, ringe=4)
+    for s in (1, -1):
+        zyl(w, f"Duese{s}", 0.14, 0.05, (s * 0.3, -0.88, 0), rot=(90, 0, 0), m="Duese", fase=0)
+    return w
+
+
+# ---------------------------------------------------------------- Störsender: Antennen und Spulenring
+def stoerer():
+    w = wurzel("stoerer")
+    zyl(w, "Rumpf", 0.6, 0.9, (0, -0.1, 0), rot=(0, 0, 0), m="Panzer", ecken=6, fase=0.04)
+    ring(w, "Ring", 0.95, 0.07, (0, -0.1, 0), rot=(0, 0, 0), m="Leuchte", seg=28)
+    zyl(w, "Schuessel", 0.45, 0.2, (0, 0.62, 0.0), rot=(-90, 0, 0), m="Rahmen", r2=0.15)
+    kugel(w, "Auge", 0.12, (0, 0.75, 0.0), seg=10, ringe=6)
+    for i in range(3):
+        a = R(i * 120)
+        zyl(w, f"Antenne{i}", 0.03, 0.9, (math.sin(a) * 0.35, -0.1 + math.cos(a) * 0.35, 0.8), m="Rahmen", ecken=6, fase=0)
+        kugel(w, f"Spitze{i}", 0.07, (math.sin(a) * 0.35, -0.1 + math.cos(a) * 0.35, 1.27), seg=8, ringe=4)
+    zyl(w, "Duese", 0.18, 0.05, (0, -0.58, 0), rot=(90, 0, 0), m="Duese", fase=0)
+    return w
+
+
+# ---------------------------------------------------------------- Scharfschütze: langer Lauf, Zielfernrohr
+def scharfschuetze():
+    w = wurzel("scharfschuetze")
+    box(w, "Rumpf", (0.55, 1.6, 0.45), (0, -0.3, 0), verjuengt=(0.7, 0.8), fase=0.05)
+    zyl(w, "Lauf", 0.07, 2.0, (0, 1.3, -0.05), rot=(-90, 0, 0), m="Rahmen", ecken=8)
+    zyl(w, "Muendung", 0.11, 0.2, (0, 2.3, -0.05), rot=(-90, 0, 0), m="Leuchte", ecken=8, fase=0)
+    zyl(w, "Fernrohr", 0.09, 0.6, (0, 0.35, 0.33), rot=(-90, 0, 0), m="Rahmen", ecken=10)
+    kugel(w, "Auge", 0.08, (0, 0.66, 0.33), seg=8, ringe=4)
+    for s in (1, -1):
+        box(w, f"Fluegel{s}", (0.9, 0.5, 0.04), (s * 0.55, -0.6, 0), rot=(0, 0, s * 10), m="Panzer", fase=0.01)
+        zyl(w, f"Duese{s}", 0.09, 0.05, (s * 0.15, -1.12, 0), rot=(90, 0, 0), m="Duese", fase=0, ecken=8)
+    return w
+
+
+# ---------------------------------------------------------------- Splitter: drei Kapseln, zerfällt
+def _kapsel(w, name, ort, r=0.42):
+    kugel(w, name, r, ort, m="Panzer", seg=10, ringe=6, streck=(1, 1.25, 1))
+    ring(w, name + "Naht", r * 1.02, 0.035, ort, rot=(90, 0, 0), m="Leuchte", seg=16)
+
+
+def splitter():
+    w = wurzel("splitter")
+    for i in range(3):
+        a = R(i * 120 + 90)
+        _kapsel(w, f"Kapsel{i}", (math.cos(a) * 0.45, 0.0, math.sin(a) * 0.45))
+    zyl(w, "Klammer", 0.25, 0.9, (0, 0, 0), rot=(-90, 0, 0), m="Rahmen", ecken=6)
+    kugel(w, "Auge", 0.13, (0, 0.55, 0), seg=10, ringe=6)
+    zyl(w, "Duese", 0.16, 0.05, (0, -0.6, 0), rot=(90, 0, 0), m="Duese", fase=0)
+    return w
+
+
+def splitterteil():
+    w = wurzel("splitterteil")
+    _kapsel(w, "Kapsel", (0, 0, 0), r=0.38)
+    kugel(w, "Auge", 0.09, (0, 0.45, 0), seg=8, ringe=4)
+    box(w, "Finne", (0.04, 0.35, 0.3), (0, -0.35, 0.25), m="Rahmen", fase=0)
+    zyl(w, "Duese", 0.1, 0.04, (0, -0.5, 0), rot=(90, 0, 0), m="Duese", fase=0, ecken=8)
+    return w
+
+
+# ---------------------------------------------------------------- Schwarmnest: an der Wand, brütet Drohnen
+def nest():
+    w = wurzel("nest")
+    kugel(w, "Koerper", 1.3, (0, 0.1, 0), m="Panzer", seg=14, ringe=9, streck=(1, 0.8, 1))
+    zyl(w, "Sockel", 1.1, 0.3, (0, -0.65, 0), rot=(90, 0, 0), m="Rahmen", ecken=10, r2=1.4)
+    for i, (x, y, z) in enumerate([(0, 0.95, 0.2), (0.75, 0.6, 0.55), (-0.75, 0.6, 0.55), (0.6, 0.7, -0.6),
+                                    (-0.6, 0.7, -0.6), (0, 0.6, 0.95)]):
+        kugel(w, f"Brutkammer{i}", 0.28, (x, y, z), m="Leuchte", seg=10, ringe=6)
+    for i in range(5):
+        a = R(i * 72)
+        zyl(w, f"Rippe{i}", 0.08, 2.0, (math.cos(a) * 1.15, 0.0, math.sin(a) * 1.15), rot=(0, 0, 0), m="Rahmen", ecken=6).rotation_euler = (math.sin(a) * 0.5, -math.cos(a) * 0.5, 0)
+    kugel(w, "Auge", 0.2, (0, 1.12, 0.45), seg=10, ringe=6)
+    return w
+
 BAUER = {"jaeger": jaeger, "geschuetz": geschuetz, "waechter": waechter, "minenleger": minenleger, "tarn": tarn,
          "schildtraeger": schildtraeger, "kamikaze": kamikaze, "drohne": drohne, "teleporter": teleporter,
          "dieb": dieb, "reparierer": reparierer,
-         "boss_koloss": boss_koloss, "boss_brutmutter": boss_brutmutter, "boss_phantom": boss_phantom}
+         "boss_koloss": boss_koloss, "boss_brutmutter": boss_brutmutter, "boss_phantom": boss_phantom,
+         "saeger": saeger, "rammbock": rammbock, "greifer": greifer, "lauerer": lauerer, "netzwerfer": netzwerfer,
+         "stoerer": stoerer, "scharfschuetze": scharfschuetze, "splitter": splitter, "splitterteil": splitterteil,
+         "nest": nest}
+# MODELLE=saeger,nest … baut nur diese (die übrigen GLBs bleiben unberührt)
+if os.environ.get("MODELLE"):
+    BAUER = {k: v for k, v in BAUER.items() if k in os.environ["MODELLE"].split(",")}
 wurzeln = {}
 for name, f in BAUER.items():
     w = f()

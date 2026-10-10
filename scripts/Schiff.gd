@@ -51,6 +51,14 @@ var _laser_cd := 0.0
 var _raketen_cd := 0.0
 var _seite := 1.0
 var _seit_treffer := 0.0
+## Neue Gegner (2026-10-10): Netz bremst, Störsender sperrt das Schildladen, Greifer zieht.
+signal behindert(text: String)
+const NETZ_DAUER := 2.0
+const NETZ_BREMSE := 0.35
+const EMP_DAUER := 3.0
+var netz_t := 0.0
+var emp_t := 0.0
+var _zug := Vector3.ZERO
 ## Aufrüstungen aus dem Hangar (Meta.schiffswerte), Grundwerte = ohne Aufrüstung.
 var laser_mult := 1.0
 var feuerrate := 1.0
@@ -154,7 +162,10 @@ func _physics_process(dt: float) -> void:
 	if not aktiv:
 		_maus = Vector2.ZERO
 		return
+	netz_t = maxf(netz_t - dt, 0.0)
+	emp_t = maxf(emp_t - dt, 0.0)
 	if not autopilot.is_empty():
+		_zug = Vector3.ZERO
 		_autopilot_fliegen(dt)
 		return
 	var pad := Input.get_vector("blick_links", "blick_rechts", "blick_hoch", "blick_runter")
@@ -180,8 +191,10 @@ func _physics_process(dt: float) -> void:
 	_boost = maxf(_boost - dt, 0.0)
 	if Input.is_action_just_pressed("nachbrenner"):
 		nachbrenner_zuenden()
-	var soll := transform.basis * ein * tempo * (NACHBRENNER_FAKTOR if _boost > 0.0 else 1.0)
+	var soll := transform.basis * ein * tempo * (NACHBRENNER_FAKTOR if _boost > 0.0 else 1.0) * (NETZ_BREMSE if netz_t > 0.0 else 1.0)
 	velocity = velocity.lerp(soll, 1.0 - exp(-(3.5 if f.has("s_daempfer") else 2.5) * dt))
+	velocity += _zug * dt
+	_zug = Vector3.ZERO
 	move_and_slide()
 	_waffen(dt)
 	schild_laden(dt)
@@ -245,7 +258,7 @@ func schild_laden(dt: float) -> void:
 	if f.has("s_nano") and huelle < huelle_max * 0.5:      # Nanoreparatur
 		huelle = minf(huelle + 0.5 * dt, huelle_max * 0.5)
 	_seit_treffer += dt
-	if schild_laedt and _seit_treffer >= schild_pause:
+	if schild_laedt and emp_t <= 0.0 and _seit_treffer >= schild_pause:
 		var rate := SCHILD_LADEN * schild_laden_mult * (SCHILD_STEHEND if velocity.length() < STILLSTAND else (1.5 if f.has("s_feld") else 1.0))
 		schild = minf(schild_max, schild + rate * dt)
 
@@ -446,6 +459,30 @@ func _treffer_ton(nur_schild: bool) -> void:
 
 func getarnt() -> bool:
 	return tarn_t > 0.0
+
+
+## Greifer: Zugkraft (m/s²) für diesen Physikschritt.
+func ziehen(kraft: Vector3) -> void:
+	_zug = kraft
+
+
+func sonder_treffer(art: String, s: float) -> void:
+	if unverwundbar or not aktiv:
+		return
+	match art:
+		"netz":
+			netz_t = NETZ_DAUER
+			treffer(s)
+			behindert.emit("NETZ — GEBREMST")
+		"emp":             # trifft nur den Schild, dafür doppelt, und sperrt sein Laden
+			_seit_treffer = 0.0
+			schild = maxf(schild - 2.0 * s * schaden_faktor, 0.0)
+			emp_t = EMP_DAUER
+			_treffer_ton(true)
+			getroffen.emit(s)
+			behindert.emit("STÖRSENDER — SCHILD LÄDT NICHT")
+		_:
+			treffer(s)
 
 
 func treffer(s: float) -> void:

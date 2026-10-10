@@ -116,6 +116,7 @@ func _starte_lauf() -> void:
 	schiff.waffe_gewechselt.connect(func(n: String): hud.aufnahme(n, Color(1.0, 0.8, 0.4)))
 	schiff.gestorben.connect(func(): _schiff_tot("Schiff zerstört"))
 	schiff.getroffen.connect(func(s: float): hud.blitz(s))
+	schiff.behindert.connect(func(t: String): hud.mitteilung(t, 1.2, HUD.ROT))
 	schiff.erz_gefunden.connect(func(m: int): level_erz += m)
 	schiff.kristall_gefunden.connect(func(m: int):
 		Meta.kristalle += m        # sofort gesichert wie Module
@@ -252,7 +253,14 @@ func _gegner_setzen() -> int:
 		pool.append_array(["tarn", "tarn"])
 	if tiefe >= 9:
 		pool.append_array(["teleporter", "schildtraeger"])
-	var einzel := {"dieb": 0, "reparierer": 0}
+	# Neue Arten 2026-10-10, gestaffelt
+	var neue_ab := {2: ["saeger"], 3: ["netzwerfer"], 4: ["splitter"], 5: ["lauerer", "lauerer"], 6: ["rammbock", "saeger"],
+			7: ["stoerer"], 8: ["greifer"], 9: ["scharfschuetze"]}
+	for ab in neue_ab:
+		if tiefe >= ab:
+			pool.append_array(neue_ab[ab])
+	var einzel := {"dieb": 0, "reparierer": 0, "nest": 0}
+	var einzel_ab := {"dieb": 6, "reparierer": 7, "nest": 4}
 	boss = null
 	for i in gen.raeume.size():
 		if i == gen.start_raum:
@@ -271,7 +279,7 @@ func _gegner_setzen() -> int:
 			zahl += 1
 		# Einzelgänger
 		for typ in einzel:
-			var ab: int = 6 if typ == "dieb" else 7
+			var ab: int = einzel_ab[typ]
 			if tiefe >= ab and einzel[typ] < 2 and _rng.randf() < 0.15:
 				einzel[typ] += 1
 				_gegner(typ, LevelGen.welt_von(zellen[_rng.randi_range(0, zellen.size() - 1)]))
@@ -336,7 +344,9 @@ func _gegner(typ: String, pos: Vector3) -> Gegner:
 		var neu := _gegner(t, p)
 		neu.alarmieren(schiff.global_position)
 		if von.typ == "boss_brutmutter":
-			neu.add_to_group("brut"))
+			neu.add_to_group("brut")
+		if von.typ == "nest":
+			neu.set_meta("nest", von.get_instance_id()))
 	g.klaut.connect(_dieb_klaut)
 	g.phase_zwei.connect(func(b: Gegner):
 		hud.mitteilung("%s — PHASE 2" % b.boss_name(), 1.8, HUD.ROT)
@@ -544,6 +554,8 @@ func _process(dt: float) -> void:
 		return
 	if Input.is_action_just_pressed("leitstrahl"):
 		leitstrahl = not leitstrahl
+		hud.mitteilung("LEITSTRAHL %s" % ("AN" if leitstrahl else "AUS"), 1.2, HUD.GRUEN if leitstrahl else HUD.GELB)
+		Protokoll.schreib("lauf", "Leitstrahl %s auf Tiefe %d" % ["an" if leitstrahl else "aus", tiefe])
 	if countdown >= 0.0:
 		countdown -= dt
 		_alarm(dt)
@@ -786,6 +798,10 @@ func _autotest() -> void:
 		return
 	if "--zeige-gegner" in OS.get_cmdline_user_args():
 		await _gegner_schau()
+		get_tree().quit(0)
+		return
+	if "--gegner-neu-test" in OS.get_cmdline_user_args():
+		await _gegner_neu_test()
 		get_tree().quit(0)
 		return
 	if "--sicht-test" in OS.get_cmdline_user_args():
@@ -1282,6 +1298,15 @@ func _controller_test() -> void:
 	erg.append("Zielhilfe: Drehung %.0f°/s bei 30 %% Stick, %.0f°/s bei vollem Stick; Drohne 4° neben dem Fadenkreuz in 10 m (freie Sicht %s): Schaden ohne Hilfe %.0f, mit Hilfe %.0f" % [
 		raten[0], raten[1], sicht, treffer[false], treffer[true]])
 	ok = ok and treffer[true] > treffer[false]
+	# 3c) Leitstrahl mit Select aus und wieder an; aus zeigt einen Hinweis statt still zu verschwinden
+	await _knopf_druck(JOY_BUTTON_BACK)
+	var leit_aus := not leitstrahl and not hud.leit_an
+	await _warte(0.2)
+	_foto("controller_leitstrahl_aus")
+	await _knopf_druck(JOY_BUTTON_BACK)
+	var leit_wieder := leitstrahl and hud.leit_an
+	erg.append("Leitstrahl: Select aus %s, wieder an %s" % [leit_aus, leit_wieder])
+	ok = ok and leit_aus and leit_wieder
 	# 4) Pause (Start), Optionen per Steuerkreuz + A, zurück mit B, weiter mit Start
 	await _knopf_druck(JOY_BUTTON_START)
 	var pausiert := get_tree().paused
@@ -1499,6 +1524,238 @@ func _sicht_test() -> void:
 	erg.append("Sichtweite %.0f m (vorher 55)" % Gegner.SICHT_WEITE)
 	ok = ok and Gegner.SICHT_WEITE > 55.0
 	Protokoll.schreib("test", "Sicht: %s → %s" % ["; ".join(erg), "BESTANDEN" if ok else "FEHLGESCHLAGEN"])
+
+
+## Neue Gegnerarten (2026-10-10): Bild je Art, dann jedes Verhalten gemessen.
+func _gegner_neu_test() -> void:
+	# Der Lauf läuft schon (Autotest-Start); ein zweites _starte_lauf ließe das erste Schiff stehen.
+	await _warte(1.0)
+	for g in get_tree().get_nodes_in_group("gegner"):
+		g.free()
+	await _warte(0.3)
+	var vor := -schiff.global_basis.z
+	var rechts := schiff.global_basis.x
+	var start := schiff.global_transform
+	var erg: Array[String] = []
+	var ok := true
+	var pruef := func(name: String, gut: bool, text: String):
+		erg.append("%s %s: %s" % ["ok  " if gut else "FEHL", name, text])
+		Protokoll.schreib("test", "Neue Gegner: " + erg[-1])      # sofort, damit ein Hänger zeigt, wo
+		return gut
+	# Bilder
+	for typ in ["saeger", "rammbock", "greifer", "lauerer", "netzwerfer", "stoerer", "scharfschuetze", "splitter", "splitterteil", "nest"]:
+		var abst: float = {"nest": 7.5, "rammbock": 6.5, "splitterteil": 3.0, "scharfschuetze": 6.5}.get(typ, 5.0)
+		var g := _testgegner(typ, schiff.global_position + vor * abst + Vector3(0, 0.4, 0), false)
+		g.rotate_y(0.7)
+		await _warte(0.5)
+		_foto("neu2_%s" % typ)
+		g.free()
+	var schutz := func():
+		schiff.unverwundbar = false
+		schiff.schild_max = 100000.0
+		schiff.schild = 100000.0
+		schiff.huelle = schiff.huelle_max
+		schiff.global_transform = start
+		schiff.velocity = Vector3.ZERO
+		Protokoll.schreib("test", "Neue Gegner: Schiff aktiv %s, unverwundbar %s, Schild %.0f" % [schiff.aktiv, schiff.unverwundbar, schiff.schild])
+	# 1 Säger
+	schutz.call()
+	var g := _testgegner("saeger", schiff.global_position + vor * 10.0, true)
+	g.alarmieren(schiff.global_position)
+	var min_d := 99.0
+	var weg_danach := 0.0
+	for i in 240:
+		await get_tree().physics_frame
+		var d := g.global_position.distance_to(schiff.global_position)
+		min_d = minf(min_d, d)
+		if min_d < Gegner.SAEGE_NAH:
+			weg_danach = maxf(weg_danach, d)
+	var verlust := 100000.0 - schiff.schild
+	ok = pruef.call("Säger", verlust > 10.0 and weg_danach > 4.0, "kam auf %.1f m, sägte %.0f Schaden, prallte ab auf %.1f m" % [min_d, verlust, weg_danach]) and ok
+	g.free()
+	# 2 Rammbock: Front blockt, Rücken nicht; Sturmlauf; Wand betäubt
+	schutz.call()
+	g = _testgegner("rammbock", schiff.global_position + vor * 8.0, false)
+	await _warte(0.1)
+	var h0 := g.hp
+	g.treffer_von(20.0, g.global_position - schiff.global_position)
+	var vorn_block := g.hp == h0
+	g.treffer_von(20.0, schiff.global_position - g.global_position)
+	var hinten := g.hp < h0
+	g.free()
+	g = _testgegner("rammbock", schiff.global_position + vor * 20.0, true)
+	g.alarmieren(schiff.global_position)
+	g._cd = 0.0
+	var max_v := 0.0
+	for i in 240:
+		await get_tree().physics_frame
+		max_v = maxf(max_v, g.velocity.length())
+	verlust = 100000.0 - schiff.schild
+	ok = pruef.call("Rammbock", vorn_block and hinten and max_v > 18.0 and verlust > 20.0,
+		"vorn geblockt %s, hinten Schaden %s, Sturm %.0f m/s, Schaden %.0f" % [vorn_block, hinten, max_v, verlust]) and ok
+	# Wand: in Richtung der nächsten Wand losrasen lassen
+	var raum := get_viewport().get_world_3d().direct_space_state
+	var wand_r := Vector3.ZERO
+	for r in [Vector3.LEFT, Vector3.RIGHT, Vector3.DOWN, Vector3.FORWARD, Vector3.BACK]:
+		var t := raum.intersect_ray(PhysicsRayQueryParameters3D.create(g.global_position, g.global_position + r * 25.0, 1))
+		if not t.is_empty():
+			wand_r = r
+			break
+	g.global_basis = Basis.looking_at(wand_r, Vector3.UP if absf(wand_r.y) < 0.9 else Vector3.FORWARD)
+	g._modus = "ramme"
+	g._ramm_dir = wand_r
+	g._phase_t = 3.0
+	var betaeubt := false
+	for i in 150:
+		await get_tree().physics_frame
+		if g.ist_betaeubt():
+			betaeubt = true
+			break
+	h0 = g.hp
+	g.treffer_von(20.0, -(-g.global_basis.z))       # von vorn, aber betäubt
+	ok = pruef.call("Rammbock Wand", betaeubt and g.hp < h0, "betäubt %s, dann von vorn verwundbar %s" % [betaeubt, g.hp < h0]) and ok
+	g.free()
+	# 3 Greifer: zieht das stehende Schiff heran
+	schutz.call()
+	g = _testgegner("greifer", schiff.global_position + vor * 17.0, true)
+	g.alarmieren(schiff.global_position)
+	g._cd = 0.0
+	await get_tree().physics_frame
+	var d0 := g.global_position.distance_to(schiff.global_position)
+	await _warte(2.0)
+	var d1 := g.global_position.distance_to(schiff.global_position)
+	var p_schiff := schiff.global_position.distance_to(start.origin)
+	ok = pruef.call("Greifer", p_schiff > 3.0, "Schiff %.1f m herangezogen (Abstand %.1f → %.1f m)" % [p_schiff, d0, d1]) and ok
+	g.free()
+	# 4 Lauerer: an der Wand, flimmert, bemerkt erst nah, springt an
+	schutz.call()
+	g = _testgegner("lauerer", schiff.global_position + vor * 10.0, true)
+	await _warte(0.2)
+	var front: Vector3 = -g.global_basis.z
+	var frei_t := raum.intersect_ray(PhysicsRayQueryParameters3D.create(g.global_position, g.global_position + front * 30.0, 1))
+	var frei_l: float = 30.0 if frei_t.is_empty() else g.global_position.distance_to(frei_t.position)
+	var fern := minf(frei_l - 2.0, 20.0)
+	schiff.global_position = g.global_position + front * fern
+	var t_min := 1.0
+	var t_max := 0.0
+	for i in 40:
+		await get_tree().physics_frame
+		t_min = minf(t_min, g._tarn)
+		t_max = maxf(t_max, g._tarn)
+	var ruhig := not g._alarm
+	schiff.global_position = g.global_position + front * 9.0
+	var sichtbar_beim_angriff := false
+	var lauer_min := 99.0
+	for i in 180:
+		await get_tree().physics_frame
+		lauer_min = minf(lauer_min, g.global_position.distance_to(schiff.global_position))
+		if g._modus == "sprung" and g._tarn < 0.05:
+			sichtbar_beim_angriff = true
+	Protokoll.schreib("test", "Neue Gegner: Lauerer kam bis %.1f m, Modus %s, Schiff aktiv %s unverwundbar %s" % [lauer_min, g._modus, schiff.aktiv, schiff.unverwundbar])
+	verlust = 100000.0 - schiff.schild
+	ok = pruef.call("Lauerer", t_min > 0.5 and t_max < 0.9 and t_max - t_min > 0.05 and (ruhig or fern <= Gegner.LAUER_NAH) and verlust > 10.0 and sichtbar_beim_angriff,
+		"Durchsichtigkeit %.2f–%.2f, in %.0f m ruhig %s, in 9 m angesprungen: Schaden %.0f, beim Sprung sichtbar %s" % [t_min, t_max, fern, ruhig, verlust, sichtbar_beim_angriff]) and ok
+	g.free()
+	# 5 Netzwerfer: Netz bremst
+	schutz.call()
+	g = _testgegner("netzwerfer", schiff.global_position + vor * 12.0, true)
+	g.alarmieren(schiff.global_position)
+	g._cd = 0.0
+	for i in 300:
+		await get_tree().physics_frame
+		if schiff.netz_t > 0.0:
+			break
+	var genetzt := schiff.netz_t > 0.0
+	Protokoll.schreib("test", "Neue Gegner: Netzwerfer Sicht %s, Alarm %s, cd %.1f, Abstand %.1f, Netzschüsse in der Luft %d" % [g._sicht, g._alarm, g._cd,
+		g.global_position.distance_to(schiff.global_position), level.get_children().filter(func(k): return k is Geschoss and k.wirkung == "netz").size()])
+	g.free()
+	Input.action_press("zurueck")
+	await _warte(0.8)
+	var v_netz := schiff.velocity.length()
+	Input.action_release("zurueck")
+	await _warte(2.5)
+	schiff.velocity = Vector3.ZERO
+	Input.action_press("zurueck")
+	await _warte(0.8)
+	var v_frei := schiff.velocity.length()
+	Input.action_release("zurueck")
+	ok = pruef.call("Netzwerfer", genetzt and v_netz < v_frei * 0.5, "Netz getroffen %s, Tempo im Netz %.1f m/s, frei %.1f m/s" % [genetzt, v_netz, v_frei]) and ok
+	# 6 Störsender: nur Schild, doppelt, Laden gesperrt
+	schutz.call()
+	schiff.schild_max = 200.0
+	schiff.schild = 200.0
+	var huelle0 := schiff.huelle
+	g = _testgegner("stoerer", schiff.global_position + vor * 12.0, true)
+	g.alarmieren(schiff.global_position)
+	g._cd = 0.0
+	for i in 300:
+		await get_tree().physics_frame
+		if schiff.emp_t > 0.0:
+			break
+	var emp := schiff.emp_t > 0.0
+	var schild_weg := 200.0 - schiff.schild
+	var emp_schaden := g.schaden
+	g.free()
+	schiff.schild = 100.0
+	schiff._seit_treffer = 100.0
+	schiff.emp_t = 3.0
+	await _warte(1.0)
+	var gesperrt := schiff.schild == 100.0
+	schiff.emp_t = 0.0
+	await _warte(1.0)
+	var laedt := schiff.schild > 100.0
+	ok = pruef.call("Störsender", emp and huelle0 == schiff.huelle and schild_weg >= 2.0 * emp_schaden * 0.99 and gesperrt and laedt,
+		"getroffen %s, Schild −%.0f (Schuss %.0f ×2), Hülle unverändert %s, Laden gesperrt %s, danach lädt %s" % [emp, schild_weg, emp_schaden, huelle0 == schiff.huelle, gesperrt, laedt]) and ok
+	# 7 Scharfschütze: stillhalten = Treffer, seitlich weg = verfehlt
+	var faelle := []
+	for ausweichen in [false, true]:
+		schutz.call()
+		var vt := raum.intersect_ray(PhysicsRayQueryParameters3D.create(schiff.global_position, schiff.global_position + vor * 25.0, 1))
+		var frei_vor: float = 25.0 if vt.is_empty() else schiff.global_position.distance_to(vt.position)
+		g = _testgegner("scharfschuetze", schiff.global_position + vor * minf(frei_vor - 3.0, 22.0), true)
+		g.alarmieren(schiff.global_position)
+		g._cd = 0.0
+		var t0 := Time.get_ticks_msec()
+		while not g.zielt_gerade() and Time.get_ticks_msec() - t0 < 3000:
+			await get_tree().physics_frame
+		Protokoll.schreib("test", "Neue Gegner: Scharfschütze legt an %s nach %.1f s, Sicht %s, Abstand %.1f" % [g.zielt_gerade(), (Time.get_ticks_msec() - t0) / 1000.0, g._sicht, g.global_position.distance_to(schiff.global_position)])
+		await _warte(0.3)
+		if ausweichen:
+			var seite := rechts * 10.0
+			if not raum.intersect_ray(PhysicsRayQueryParameters3D.create(schiff.global_position, schiff.global_position + seite * 1.2, 1)).is_empty():
+				seite = -seite
+			schiff.global_position += seite
+		await _warte(2.5)
+		faelle.append(100000.0 - schiff.schild)
+		g.free()
+	ok = pruef.call("Scharfschütze", faelle[0] > 20.0 and faelle[1] == 0.0, "stillgehalten Schaden %.0f, nach 0,3 s 10 m seitlich weg Schaden %.0f" % [faelle[0], faelle[1]]) and ok
+	# 8 Splitter
+	schutz.call()
+	var teile_vor := get_tree().get_nodes_in_group("gegner").size()
+	g = _testgegner("splitter", schiff.global_position + vor * 12.0, false)
+	g.treffer(1e9)
+	await _warte(0.3)
+	var teile := 0
+	for x in get_tree().get_nodes_in_group("gegner"):
+		if x.typ == "splitterteil":
+			teile += 1
+	ok = pruef.call("Splitter", teile == 3, "zerfiel in %d Teile" % teile) and ok
+	for x in get_tree().get_nodes_in_group("gegner"):
+		x.free()
+	# 9 Schwarmnest
+	g = _testgegner("nest", schiff.global_position + vor * 12.0, true)
+	await _warte(0.2)
+	var an_wand := raum.intersect_ray(PhysicsRayQueryParameters3D.create(g.global_position, g.global_position + g.global_basis.z * 3.0, 1)).size() > 0
+	g.alarmieren(schiff.global_position)
+	var kinder := []
+	for runde in 5:
+		g._spezial_t = 0.0
+		await _warte(0.3)
+		kinder.append(g.nest_kinder())
+	ok = pruef.call("Schwarmnest", an_wand and kinder[0] == 2 and kinder[-1] == Gegner.NEST_MAX, "an der Wand %s, Drohnen je Takt %s (höchstens %d)" % [an_wand, kinder, Gegner.NEST_MAX]) and ok
+	for x in get_tree().get_nodes_in_group("gegner"):
+		x.free()
+	Protokoll.schreib("test", "GEGNER-NEU-TEST %s" % ("BESTANDEN" if ok else "FEHLGESCHLAGEN"))
 
 
 func _testgegner(typ: String, pos: Vector3, physik: bool) -> Gegner:

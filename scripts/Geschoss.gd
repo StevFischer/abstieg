@@ -17,6 +17,7 @@ var knall := -1.0         ## Explosionsgröße beim Einschlag; < 0: nach Art (La
 var flaeche := 0.0        ## > 0: Flächenschaden in diesem Radius, nimmt nach außen ab (trifft auch das eigene Schiff)
 var splitter := 0         ## > 0: beim Einschlag so viele kleine Zielsucher
 var rundum := false       ## Zielsuche in alle Richtungen (Splitter), sonst nur nach vorn
+var wirkung := ""         ## Gegnerschüsse: "netz" (bremst) oder "emp" (nur Schild, Laden gesperrt) — Schiff.sonder_treffer
 var _ziel: Node3D
 ## Forschung (nur Spielerlaser): durchschlagen / abprallen / Kettenblitz
 var durchschlag := 0
@@ -106,7 +107,9 @@ func _physics_process(dt: float) -> void:
 			global_position = treffer.position
 			return
 		if obj != null and flaeche <= 0.0:
-			if obj.has_method("treffer_von"):
+			if wirkung != "" and obj.has_method("sonder_treffer"):
+				obj.sonder_treffer(wirkung, schaden)
+			elif obj.has_method("treffer_von"):
 				obj.treffer_von(schaden, geschw)
 			elif obj.has_method("treffer"):
 				obj.treffer(schaden)
