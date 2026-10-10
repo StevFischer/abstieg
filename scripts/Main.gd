@@ -163,8 +163,12 @@ func _gegner_setzen() -> int:
 	var pool := ["jaeger", "jaeger", "geschuetz"]
 	if tiefe >= 3:
 		pool.append("waechter")
+	if tiefe >= 5:
+		pool.append("minenleger")
 	if tiefe >= 6:
 		pool.append_array(["waechter", "jaeger"])
+	if tiefe >= 8:
+		pool.append_array(["tarn", "tarn"])
 	for i in gen.raeume.size():
 		if i == gen.start_raum:
 			continue
@@ -407,6 +411,10 @@ func _autotest() -> void:
 	klang.speichern()
 	_starte_lauf()
 	schiff.unverwundbar = true
+	if "--zeige-gegner" in OS.get_cmdline_user_args():
+		await _gegner_schau()
+		get_tree().quit(0)
+		return
 	if "--zeige-beute" in OS.get_cmdline_user_args():
 		await _beute_schau()
 		get_tree().quit(0)
@@ -443,11 +451,20 @@ func _autotest() -> void:
 			if LevelGen.welt_von(z).distance_to(reaktor.global_position) > 7.0:
 				schiff.autopilot.append(LevelGen.welt_von(z))
 		var t0 := Time.get_ticks_msec()
+		var bilder := []
 		while not schiff.autopilot.is_empty() and Time.get_ticks_msec() - t0 < 120000:
 			await get_tree().process_frame
+			bilder.append(get_process_delta_time())
+		bilder.sort()
+		if bilder.size() > 20:
+			Protokoll.schreib("test", "Tiefe %d: Bildrate im Flug Mittel %.0f fps, schlechteste 5 %% %.0f fps, %d Gegner, %d Teile gezeichnet" % [
+				t, bilder.size() / ((Time.get_ticks_msec() - t0) / 1000.0), 1.0 / bilder[int(bilder.size() * 0.95)],
+				get_tree().get_nodes_in_group("gegner").size(),
+				RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME)])
 		var abstand := schiff.global_position.distance_to(reaktor.global_position)
 		var im_raum: bool = gen.zellen.get(gen.naechste_zelle(schiff.global_position), -2) == gen.reaktor_raum
-		var angekommen := schiff.autopilot.is_empty() and (im_raum or abstand < 14.0)
+		# Angekommen heißt: alle Wegpunkte abgeflogen (der letzte liegt bei kleinen Reaktorräumen im Zugang).
+		var angekommen := schiff.autopilot.is_empty() and (im_raum or abstand < 20.0)
 		Protokoll.schreib("test", "Tiefe %d: Flug zum Reaktor über %d Zellen in %.1f s, Restabstand %.1f m → %s" % [
 			t, weg.size(), (Time.get_ticks_msec() - t0) / 1000.0, abstand, "angekommen" if angekommen else "STECKENGEBLIEBEN"])
 		ok = ok and angekommen
@@ -464,8 +481,17 @@ func _autotest() -> void:
 			schiff.autopilot.append(LevelGen.welt_von(z))
 		schiff.autopilot.append(ausgang.global_position)
 		t0 = Time.get_ticks_msec()
+		var stand_pos := schiff.global_position
+		var stand_t := Time.get_ticks_msec()
 		while tiefe == t and Time.get_ticks_msec() - t0 < 120000:
 			await get_tree().process_frame
+			# Messpunkt: hängt der Autopilot 3 s fest, wer steht im Weg?
+			if schiff.global_position.distance_to(stand_pos) > 1.0:
+				stand_pos = schiff.global_position
+				stand_t = Time.get_ticks_msec()
+			elif Time.get_ticks_msec() - stand_t > 3000:
+				stand_t = Time.get_ticks_msec()
+				Protokoll.schreib("test", "FESTGEHANGEN bei %s: %s" % [schiff.global_position.snapped(Vector3.ONE * 0.1), _naechstes_hindernis()])
 		var gewechselt := tiefe != t
 		Protokoll.schreib("test", "Tiefe %d: Ausgang %s nach %.1f s" % [
 			t, "erreicht" if gewechselt else "NICHT erreicht", (Time.get_ticks_msec() - t0) / 1000.0])
@@ -489,6 +515,82 @@ func _autotest() -> void:
 	Protokoll.schreib("test", "Abgespielte Töne: %s" % get_node("/root/Klang").zaehler)
 	Protokoll.schreib("test", "AUTOTEST %s" % ("BESTANDEN" if ok else "FEHLGESCHLAGEN"))
 	get_tree().quit(0 if ok else 1)
+
+
+## Alle fünf Gegnertypen vor dem Schiff (Bildprüfung), danach Verhalten von Minenleger und Tarnroboter.
+func _gegner_schau() -> void:
+	for g in get_tree().get_nodes_in_group("gegner"):
+		g.free()
+	var vor := -schiff.global_basis.z
+	var rechts := schiff.global_basis.x
+	var typen := ["jaeger", "geschuetz", "waechter", "minenleger", "tarn"]
+	var reihe := []
+	await _warte(3.5)                      # Tiefen-Einblendung abwarten
+	for i in typen.size():
+		var g := Gegner.new()
+		g.einrichten(typen[i], 1)
+		g.position = schiff.global_position + vor * 10.0 + rechts * (i - 2) * 2.5
+		g.ziel = schiff
+		level.add_child(g)
+		g.set_physics_process(false)       # erst nach dem Einhängen — vorher schaltet Godot es wieder ein
+		g.look_at(schiff.global_position, Vector3.UP)
+		g.rotate_y(0.6)                    # schräg von vorn
+		reihe.append(g)
+	await _warte(1.5)
+	_foto("gegner_reihe")
+	for g in reihe:
+		g.free()
+	# Nahaufnahmen: je Typ allein, 5 m vor dem Schiff, schräg von vorn
+	for typ in typen:
+		var g := Gegner.new()
+		g.einrichten(typ, 1)
+		g.position = schiff.global_position + vor * 5.0 + Vector3(0, 0.4, 0)
+		g.ziel = schiff
+		level.add_child(g)
+		g.set_physics_process(false)       # erst nach dem Einhängen — vorher schaltet Godot es wieder ein
+		g.look_at(schiff.global_position, Vector3.UP)
+		g.rotate_y(0.7)
+		var alt := schiff.global_transform
+		schiff.global_position += Vector3(0, 1.6, 0) + vor * 1.2      # leicht von oben
+		schiff.look_at(g.global_position, Vector3.UP)
+		await _warte(1.0)
+		_foto("gegner_%s" % typ)
+		schiff.global_transform = alt
+		g.free()
+	# Tarnroboter: aus 25 m getarnt, aus 8 m sichtbar
+	var t := Gegner.new()
+	t.einrichten("tarn", 8)
+	t.position = schiff.global_position + vor * 25.0
+	t.ziel = schiff
+	level.add_child(t)
+	t.set_physics_process(false)
+	await _warte(1.0)
+	var fern := t.ist_getarnt()
+	_foto("tarn_fern")
+	t.position = schiff.global_position + vor * 8.0
+	await _warte(1.0)
+	var nah := t.ist_getarnt()
+	Protokoll.schreib("test", "Tarnroboter: in 25 m getarnt %s, in 8 m getarnt %s → %s" % [fern, nah, "ok" if fern and not nah else "FEHLER"])
+	t.free()
+	# Minenleger: legt Minen, Mine trifft das Schiff
+	var m := Gegner.new()
+	m.einrichten("minenleger", 5)
+	m.position = schiff.global_position + vor * 16.0
+	m.ziel = schiff
+	m.welt = level
+	level.add_child(m)
+	await _warte(7.0)
+	var minen := get_tree().get_nodes_in_group("minen")
+	Protokoll.schreib("test", "Minenleger: %d Minen in 7 s gelegt → %s" % [minen.size(), "ok" if minen.size() >= 1 else "FEHLER"])
+	_foto("minenleger_minen")
+	if not minen.is_empty():
+		schiff.unverwundbar = false
+		var vorher := schiff.schild + schiff.huelle
+		schiff.global_position = minen[0].global_position + Vector3(0, 0, 2.0)
+		await _warte(1.2)
+		Protokoll.schreib("test", "Mine: Schild+Hülle vorher %.0f, nachher %.0f → %s" % [
+			vorher, schiff.schild + schiff.huelle, "ok" if schiff.schild + schiff.huelle < vorher else "FEHLER"])
+		schiff.unverwundbar = true
 
 
 ## Alle Fundstückarten nebeneinander vor dem Schiff — in 8 m und 15 m Abstand — für die Bildprüfung.
@@ -523,6 +625,19 @@ func _beute_schau() -> void:
 	_foto("beute_voll")
 	Protokoll.schreib("test", "Beute-Schau: Raketen vorher %d, nachher %d, Fundstück noch da: %s" % [
 		vorrat, schiff.raketen, not get_tree().get_nodes_in_group("beute_rakete").is_empty()])
+
+
+func _naechstes_hindernis() -> String:
+	var beste := ""
+	var bd := INF
+	for g in get_tree().get_nodes_in_group("gegner") + get_tree().get_nodes_in_group("minen"):
+		var d: float = g.global_position.distance_to(schiff.global_position)
+		if d < bd:
+			bd = d
+			beste = "%s in %.1f m" % [g.typ if g is Gegner else "Mine", d]
+	var q := PhysicsRayQueryParameters3D.create(schiff.global_position, schiff.autopilot[0] if not schiff.autopilot.is_empty() else schiff.global_position, 1)
+	var wand := get_world_3d().direct_space_state.intersect_ray(q)
+	return "nächstes: %s; Wand zwischen Schiff und Wegpunkt: %s" % [beste, not wand.is_empty()]
 
 
 func _warte(s: float) -> void:

@@ -2,17 +2,32 @@ class_name Gegner
 extends CharacterBody3D
 ## Minenroboter. Schweben ruhig, bis sie das Schiff sehen; danach jagen sie es,
 ## fliegen zur letzten bekannten Stelle, wenn die Sicht abreißt.
+## Modelle: assets/gegner/<typ>.glb, gebaut von tools/modelle_bauen.py (Blender).
+## Deren Materialnamen (Panzer, Rahmen, Leuchte, Duese, Mine) werden hier ersetzt.
+##
+## Eigenes Verhalten:
+##   minenleger — hält Abstand und legt Minen, schießt selbst nicht (ab Tiefe 5)
+##   tarn       — fast unsichtbar, bis er nah ist, schießt oder getroffen wird (ab Tiefe 8)
 
 signal zerstoert(g: Gegner)
 
 const TYPEN := {
 	"jaeger": {"hp": 30.0, "schaden": 6.0, "cd": 1.1, "schuss": 16.0, "tempo": 9.0, "abstand": 11.0, "radius": 1.0,
 		"farbe": Color(0.55, 0.14, 0.10), "auge": Color(1.0, 0.25, 0.1), "erz": 4},
-	"geschuetz": {"hp": 55.0, "schaden": 9.0, "cd": 1.6, "schuss": 13.0, "tempo": 0.0, "abstand": 0.0, "radius": 1.0,
+	"geschuetz": {"hp": 55.0, "schaden": 9.0, "cd": 1.6, "schuss": 13.0, "tempo": 0.0, "abstand": 0.0, "radius": 1.1,
 		"farbe": Color(0.42, 0.42, 0.47), "auge": Color(1.0, 0.6, 0.1), "erz": 5},
 	"waechter": {"hp": 130.0, "schaden": 14.0, "cd": 2.0, "schuss": 11.0, "tempo": 4.5, "abstand": 6.0, "radius": 1.4,
 		"farbe": Color(0.22, 0.36, 0.22), "auge": Color(0.3, 1.0, 0.3), "erz": 10},
+	"minenleger": {"hp": 70.0, "schaden": 18.0, "cd": 3.2, "schuss": 0.0, "tempo": 6.0, "abstand": 20.0, "radius": 1.25,
+		"farbe": Color(0.55, 0.45, 0.16), "auge": Color(1.0, 0.5, 0.1), "erz": 12},
+	"tarn": {"hp": 45.0, "schaden": 10.0, "cd": 1.4, "schuss": 20.0, "tempo": 11.0, "abstand": 9.0, "radius": 1.0,
+		"farbe": Color(0.24, 0.2, 0.34), "auge": Color(0.85, 0.3, 1.0), "erz": 14},
 }
+const TARN_NAH := 14.0      ## näher als das wird der Tarnroboter sichtbar
+const TARN_UNSICHTBAR := 0.93
+
+static var _modelle := {}
+static var _platten: ImageTexture
 
 var typ := "jaeger"
 var hp := 30.0
@@ -33,8 +48,12 @@ var _alarm := false
 var _letzte := Vector3.ZERO
 var _zeit := 0.0
 var _tot := false
-var _mat: StandardMaterial3D
 var _auge: Color
+var _blitz: StandardMaterial3D
+var _teile: Array[MeshInstance3D] = []
+var _rotor: Node3D
+var _tarn := 0.0            ## 0 = voll sichtbar, TARN_UNSICHTBAR = fast weg
+var _enttarnt_t := 0.0
 
 
 func einrichten(p_typ: String, stufe: int) -> void:
@@ -60,66 +79,89 @@ func einrichten(p_typ: String, stufe: int) -> void:
 	kugel.radius = d.radius
 	form.shape = kugel
 	add_child(form)
-	_mat = StandardMaterial3D.new()
-	_mat.albedo_color = d.farbe
-	_mat.metallic = 0.6
-	_mat.roughness = 0.4
-	match typ:
-		"jaeger":
-			_teil(_box(Vector3(1.0, 0.5, 1.6)), Vector3.ZERO)
-			_teil(_box(Vector3(2.6, 0.1, 0.7)), Vector3(0, 0, 0.3))
-			_teil(_box(Vector3(0.1, 0.8, 0.6)), Vector3(1.3, 0, 0.3))
-			_teil(_box(Vector3(0.1, 0.8, 0.6)), Vector3(-1.3, 0, 0.3))
-			_leuchte(0.18, Vector3(0, 0, -0.82))
-		"geschuetz":
-			var k := SphereMesh.new()
-			k.radius = 0.9
-			k.height = 1.8
-			k.radial_segments = 10
-			k.rings = 6
-			_teil(k, Vector3.ZERO)
-			var rohr := CylinderMesh.new()
-			rohr.top_radius = 0.15
-			rohr.bottom_radius = 0.2
-			rohr.height = 1.3
-			var r := _teil(rohr, Vector3(0, -0.15, -0.9))
-			r.rotation.x = PI / 2.0
-			_leuchte(0.22, Vector3(0, 0.35, -0.75))
-		"waechter":
-			_teil(_box(Vector3(2.0, 2.0, 2.0)), Vector3.ZERO)
-			for x in [-1.0, 1.0]:
-				for y in [-1.0, 1.0]:
-					_teil(_box(Vector3(0.4, 0.4, 2.4)), Vector3(x, y, 0))
-			_leuchte(0.38, Vector3(0, 0, -1.02))
+	_modell_laden(d)
+	if typ == "tarn":
+		_tarn = TARN_UNSICHTBAR
+		_tarnung_anwenden()
 
 
-func _box(g: Vector3) -> BoxMesh:
-	var b := BoxMesh.new()
-	b.size = g
-	return b
+func _modell_laden(d: Dictionary) -> void:
+	if not _modelle.has(typ):
+		_modelle[typ] = load("res://assets/gegner/%s.glb" % typ)
+	var modell: Node3D = _modelle[typ].instantiate()
+	modell.name = "Modell"
+	add_child(modell)
+	_blitz = StandardMaterial3D.new()
+	_blitz.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_blitz.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_blitz.albedo_color = Color(1, 1, 1, 0)
+	var mats := _materialien(d)
+	for mi: MeshInstance3D in modell.find_children("*", "MeshInstance3D", true, false):
+		_teile.append(mi)
+		mi.material_overlay = _blitz
+		for s in mi.mesh.get_surface_count():
+			var alt := mi.mesh.surface_get_material(s)
+			var name := alt.resource_name if alt != null else ""
+			for k in mats:
+				if name.begins_with(k):
+					mi.set_surface_override_material(s, mats[k])
+		if mi.name.begins_with("Rotor"):
+			_rotor = mi
 
 
-func _teil(mesh: Mesh, pos: Vector3) -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	mi.mesh = mesh
-	mi.material_override = _mat
-	mi.position = pos
-	add_child(mi)
-	return mi
+## Je Typ ein Satz Materialien — geteilt, damit 80 Roboter nicht 400 Materialien bedeuten.
+static var _mat_cache := {}
+func _materialien(d: Dictionary) -> Dictionary:
+	if _mat_cache.has(typ):
+		return _mat_cache[typ]
+	if _platten == null:
+		var bild: Image = Texturen._platten({}, 7, Color(0.45, 0.45, 0.47), Color(1, 1, 1), 16)[0]
+		bild.generate_mipmaps()
+		_platten = ImageTexture.create_from_image(bild)
+	var panzer := StandardMaterial3D.new()
+	# Hell genug für die dunklen Minen: ohne Himmel spiegelt Metall nichts, also wenig Metallanteil.
+	panzer.albedo_color = Color(minf(d.farbe.r * 1.7, 1.0), minf(d.farbe.g * 1.7, 1.0), minf(d.farbe.b * 1.7, 1.0))
+	panzer.albedo_texture = _platten
+	panzer.uv1_triplanar = true
+	panzer.uv1_scale = Vector3(1.6, 1.6, 1.6)
+	panzer.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
+	panzer.metallic = 0.2
+	panzer.roughness = 0.5
+	var rahmen := panzer.duplicate() as StandardMaterial3D
+	rahmen.albedo_color = Color(0.34, 0.34, 0.37)
+	rahmen.metallic = 0.3
+	var leuchte := StandardMaterial3D.new()
+	leuchte.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	leuchte.albedo_color = Color(d.auge.r * 3.0, d.auge.g * 3.0, d.auge.b * 3.0)
+	var duese := leuchte.duplicate() as StandardMaterial3D
+	duese.albedo_color = Color(2.6, 1.4, 0.5)
+	var mine := leuchte.duplicate() as StandardMaterial3D
+	mine.albedo_color = Color(3.0, 1.3, 0.3)
+	var satz := {"Panzer": panzer, "Rahmen": rahmen, "Leuchte": leuchte, "Duese": duese, "Mine": mine}
+	_mat_cache[typ] = satz
+	return satz
 
 
-func _leuchte(r: float, pos: Vector3) -> void:
-	var k := SphereMesh.new()
-	k.radius = r
-	k.height = r * 2.0
-	var m := StandardMaterial3D.new()
-	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	m.albedo_color = Color(_auge.r * 3.0, _auge.g * 3.0, _auge.b * 3.0)
-	k.material = m
-	var mi := MeshInstance3D.new()
-	mi.mesh = k
-	mi.position = pos
-	add_child(mi)
+func _process(dt: float) -> void:
+	if _rotor:
+		_rotor.rotate_object_local(Vector3.UP, dt * 2.5)
+	if typ == "tarn":
+		_enttarnt_t -= dt
+		var nah := ziel != null and is_instance_valid(ziel) and global_position.distance_to(ziel.global_position) < TARN_NAH
+		var soll := 0.0 if (nah or _enttarnt_t > 0.0) else TARN_UNSICHTBAR
+		var neu := move_toward(_tarn, soll, dt * 1.8)
+		if neu != _tarn:
+			_tarn = neu
+			_tarnung_anwenden()
+
+
+func _tarnung_anwenden() -> void:
+	for mi in _teile:
+		mi.transparency = _tarn
+
+
+func ist_getarnt() -> bool:
+	return _tarn > 0.5
 
 
 func _physics_process(dt: float) -> void:
@@ -147,12 +189,16 @@ func _physics_process(dt: float) -> void:
 					soll_v = r * tempo
 				elif dist < abstand - 2.0:
 					soll_v = -r * tempo
-				if typ == "jaeger":
+				if typ == "jaeger" or typ == "tarn":
 					soll_v += global_basis.x * sin(_zeit * 1.3) * tempo * 0.6
-			else:
+			elif typ != "minenleger":
 				var w := _letzte - global_position
 				soll_v = w.normalized() * tempo if w.length() > 2.0 else Vector3.ZERO
-		if _sicht and _cd <= 0.0 and (-global_basis.z).dot(zum / maxf(dist, 0.01)) > 0.85:
+		if typ == "minenleger":
+			if _cd <= 0.0 and dist < 45.0:
+				_mine_legen()
+				_cd = cd_basis * randf_range(0.8, 1.2)
+		elif _sicht and _cd <= 0.0 and (-global_basis.z).dot(zum / maxf(dist, 0.01)) > 0.85:
 			_schiessen()
 			_cd = cd_basis * randf_range(0.8, 1.3)
 	velocity = velocity.lerp(soll_v, 1.0 - exp(-3.0 * dt))
@@ -182,6 +228,15 @@ func _schiessen() -> void:
 	richtung = (richtung + Vector3(randf() - 0.5, randf() - 0.5, randf() - 0.5) * 0.06).normalized()
 	welt.add_child(Geschoss.neu(start, richtung, schuss_tempo, schaden, false, _auge))
 	Effekte.ton("laser_gegner", start, -4.0)
+	if typ == "tarn":
+		_enttarnt_t = 2.0      # wer schießt, verrät sich
+
+
+func _mine_legen() -> void:
+	if welt == null:
+		return
+	var m := Mine.neu(global_position + global_basis.z * 1.6, schaden)
+	welt.add_child(m)
 
 
 func treffer(s: float) -> void:
@@ -189,11 +244,11 @@ func treffer(s: float) -> void:
 		return
 	hp -= s
 	_alarm = true
+	_enttarnt_t = 2.0
 	if ziel != null and is_instance_valid(ziel):
 		_letzte = ziel.global_position
-	var alt := _mat.albedo_color
-	_mat.albedo_color = Color.WHITE
-	create_tween().tween_property(_mat, "albedo_color", alt, 0.15)
+	_blitz.albedo_color.a = 0.75
+	create_tween().tween_property(_blitz, "albedo_color:a", 0.0, 0.15)
 	if hp <= 0.0:
 		_tot = true
 		remove_from_group("ziele")
