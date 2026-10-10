@@ -160,6 +160,11 @@ func _lade_level() -> void:
 	_umgebung_setzen()
 	Meta.rekord = maxi(Meta.rekord, tiefe)
 	Meta.speichern()
+	if schiff:
+		if Meta.erforscht("b_magazin"):
+			schiff.raketen = schiff.raketen_max
+		if Meta.erforscht("t_tarn"):
+			schiff.tarn_t = 5.0
 	# Reparaturdrohne: zu Beginn jeder Tiefe Hülle zurück
 	var rep := float(Meta.schiffswerte().reparatur)
 	if schiff and rep > 0.0 and schiff.huelle < schiff.huelle_max:
@@ -325,7 +330,14 @@ func _umgebung_setzen() -> void:
 	e.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 
 
+## Schatzsucher: Bosse lassen doppelt so viel Erz fallen.
+func boss_erz_faktor() -> int:
+	return 2 if Meta.erforscht("b_schatz") else 1
+
+
 func _gegner_weg(g: Gegner) -> void:
+	if schiff and is_instance_valid(schiff):
+		schiff.ueberladung_ausloesen()
 	if g.erz > 0 and not g.ist_boss:
 		level.add_child.call_deferred(Beute.neu("erz", g.global_position, g.erz))
 	if g.beute > 0:
@@ -333,7 +345,7 @@ func _gegner_weg(g: Gegner) -> void:
 	if g.ist_boss:
 		for i in 8:     # Bossbeute: ein Kranz aus Erz
 			var p := g.global_position + Vector3(cos(TAU * i / 8.0), 0.3 * (i % 2), sin(TAU * i / 8.0)) * 2.5
-			level.add_child.call_deferred(Beute.neu("erz", p, g.erz / 8))
+			level.add_child.call_deferred(Beute.neu("erz", p, g.erz / 8 * boss_erz_faktor()))
 		reaktor.schirm_aus()
 		hud.boss_aus()
 		hud.mitteilung("%s BESIEGT\nReaktor ungeschützt" % g.boss_name(), 2.5, HUD.GELB)
@@ -410,6 +422,11 @@ func _auffuellung(huelle: int, raketen: int) -> String:
 	return " · ".join(teile)
 
 
+## Beim Tod gerettetes Erz der Tiefe: die Hälfte, mit Notreserve alles.
+func gerettetes_erz() -> int:
+	return level_erz if Meta.erforscht("b_reserve") else level_erz / 2
+
+
 func _schiff_tot(grund: String) -> void:
 	if zustand != "flug":
 		return
@@ -417,7 +434,7 @@ func _schiff_tot(grund: String) -> void:
 	zustand = "tot"
 	schiff.aktiv = false
 	Effekte.explosion(level, schiff.global_position, Color(1.0, 0.5, 0.2), 6.0)
-	var gerettet := level_erz / 2
+	var gerettet := gerettetes_erz()
 	Meta.bank += gerettet
 	lauf_erz += gerettet
 	Meta.speichern()
@@ -681,6 +698,10 @@ func _autotest() -> void:
 		return
 	if "--zeige-gegner" in OS.get_cmdline_user_args():
 		await _gegner_schau()
+		get_tree().quit(0)
+		return
+	if "--forschung-test" in OS.get_cmdline_user_args():
+		await _forschung_test()
 		get_tree().quit(0)
 		return
 	if "--boss-jagd-test" in OS.get_cmdline_user_args():
@@ -1635,7 +1656,7 @@ func _aufwertungs_test() -> void:
 		await _warte(0.3)
 		gesehen.append(hangar._reiter)
 		_foto("aufwertung_hangar_%s" % hangar._reiter)
-	ok = pruef.call("Reiter", gesehen == ["kampf", "ueberleben", "wirtschaft", "werkzeuge", "schiff"], "RB schaltet %s" % [gesehen]) and ok
+	ok = pruef.call("Reiter", gesehen == ["kampf", "ueberleben", "wirtschaft", "werkzeuge", "forschung"], "RB schaltet %s" % [gesehen]) and ok
 	Meta.rekord = 4
 	hangar.reiter_waehlen("wirtschaft")
 	await _warte(0.4)
@@ -1646,6 +1667,177 @@ func _aufwertungs_test() -> void:
 		Protokoll.schreib("test", "Aufwertung: " + e)
 	Protokoll.schreib("test", "AUFWERTUNGS-TEST %s" % ("BESTANDEN" if ok else "FEHLGESCHLAGEN"))
 	Meta.zuruecksetzen()     # Teststände nicht in den nächsten Test mitnehmen (gemeinsamer Autotest-Spielstand)
+
+
+## Forschungsbaum: Punkte, Reihenfolge, Querverbindungen, jede Wirkung im Spiel, Hangar-Bild.
+func _forschung_test() -> void:
+	var erg: Array[String] = []
+	var ok := true
+	var pruef := func(name: String, gut: bool, text: String):
+		erg.append("%s %s: %s" % ["ok  " if gut else "FEHL", name, text])
+		return gut
+	Meta.zuruecksetzen()
+	Meta.rekord = 40
+	ok = pruef.call("Punkte", Meta.forschungspunkte_frei() == 40, "Rekord 40 → %d Punkte frei" % Meta.forschungspunkte_frei()) and ok
+	ok = pruef.call("Reihenfolge", not Meta.erforschen("f_durchschlag") and Meta.erforschen("f_fokus") and Meta.erforschen("f_durchschlag"),
+		"Durchschlag erst nach Fokuslinse") and ok
+	Meta.erforschen("f_abprall")
+	ok = pruef.call("Querverbindung", not Meta.erforschen("f_kette"), "Kettenblitz ohne Trägheitsdämpfer gesperrt") and ok
+	for runde in 3:      # Querverbindungen zeigen auf Knoten weiter unten in der Liste
+		for k in Meta.FORSCHUNG:
+			Meta.erforschen(k.id)
+	ok = pruef.call("Alles", Meta.forschung.size() == 16 and Meta.forschungspunkte_frei() == 7, "%d Knoten erforscht, %d Punkte übrig (40 − 33)" % [Meta.forschung.size(), Meta.forschungspunkte_frei()]) and ok
+	Meta.laden()
+	ok = pruef.call("Gespeichert", Meta.forschung.size() == 16, "nach Neuladen %d Knoten" % Meta.forschung.size()) and ok
+	Meta.start_tiefe = 1
+	_starte_lauf()
+	await _warte(1.0)
+	for g in get_tree().get_nodes_in_group("gegner"):
+		g.free()
+	for b in get_tree().get_nodes_in_group("beute"):
+		b.free()
+	schiff.unverwundbar = true
+	schiff.tarn_t = 0.0
+	var neue := func() -> Array:
+		var aus := []
+		for k in level.get_children():
+			if k is Geschoss and k.vom_spieler and not k.has_meta("alt"):
+				k.set_meta("alt", true)
+				aus.append(k)
+		return aus
+	neue.call()
+	var w := Waffen.finde("zwilling")
+	schiff.laser_wahl = "zwilling"
+	schiff.krit = 0.0
+	schiff.laser_schuss()
+	var gs: Array = neue.call()
+	ok = pruef.call("Fokuslinse", gs.size() == 1 and is_equal_approx(gs[0].schaden, w.schaden * 1.08), "Zwilling %.2f statt %.1f" % [gs[0].schaden, w.schaden]) and ok
+	ok = pruef.call("Laser-Eigenschaften", gs[0].durchschlag == 1 and gs[0].abprall == 1 and gs[0].kette, "durchschlag %d, abprall %d, kette %s" % [gs[0].durchschlag, gs[0].abprall, gs[0].kette]) and ok
+	gs[0].free()
+	ok = pruef.call("Spulen", is_equal_approx(schiff.schild_max, 65.0), "Schild %.0f (50 + 15)" % schiff.schild_max) and ok
+	ok = pruef.call("Dämpfer", is_equal_approx(schiff.tempo, 14.0 * 1.06), "Tempo %.2f m/s" % schiff.tempo) and ok
+	# Feldregeneration: im Flug 1,5 × 1,5
+	schiff.schild = 0.0
+	schiff.velocity = Vector3(5, 0, 0)
+	schiff._seit_treffer = 99.0
+	schiff.schild_laden(1.0)
+	ok = pruef.call("Feldregeneration", is_equal_approx(schiff.schild, 2.25), "im Flug %.2f je s statt 1,5" % schiff.schild) and ok
+	schiff.huelle = 30.0
+	schiff.schild_laden(1.0)
+	ok = pruef.call("Nanoreparatur", is_equal_approx(schiff.huelle, 30.5), "Hülle 30 → %.1f in 1 s" % schiff.huelle) and ok
+	schiff.velocity = Vector3.ZERO
+	var e0 := level_erz
+	schiff.aufnehmen("erz", 10)
+	ok = pruef.call("Erzsonde", level_erz - e0 == 11, "10 Erz → +%d" % (level_erz - e0)) and ok
+	level_erz = 40
+	ok = pruef.call("Notreserve", gerettetes_erz() == 40, "beim Tod gerettet %d von 40" % gerettetes_erz()) and ok
+	ok = pruef.call("Schatzsucher", boss_erz_faktor() == 2, "Boss-Erz ×%d" % boss_erz_faktor()) and ok
+	# Raketensparer: 400 Schüsse
+	schiff.raketen = 100000
+	var r0 := schiff.raketen
+	for i in 400:
+		schiff.raketen_schuss()
+		for g in neue.call():
+			g.free()
+	var gespart := 400 - (r0 - schiff.raketen)
+	ok = pruef.call("Raketensparer", gespart > 60 and gespart < 140, "%d von 400 Raketen kostenlos (soll ~100)" % gespart) and ok
+	schiff.raketen = 0
+	# Überladung
+	schiff.ueberladung_ausloesen()
+	schiff.laser_schuss()
+	for g in neue.call():
+		g.free()
+	ok = pruef.call("Überladung", is_equal_approx(schiff._laser_cd, w.cd / 1.25), "Abklingzeit %.3f statt %.3f" % [schiff._laser_cd, w.cd]) and ok
+	await _warte(3.2)
+	# Volle Magazine und Tarnstart: neue Tiefe laden
+	_lade_level()
+	await _warte(0.5)
+	for g in get_tree().get_nodes_in_group("gegner"):
+		g.free()
+	for b in get_tree().get_nodes_in_group("beute"):
+		b.free()
+	ok = pruef.call("Volle Magazine", schiff.raketen == schiff.raketen_max, "Raketen %d/%d nach neuer Tiefe" % [schiff.raketen, schiff.raketen_max]) and ok
+	var vor := -schiff.global_basis.z
+	var weit := schiff.global_position + vor * 12.0
+	var tg := _testgegner("waechter", weit, true)
+	tg.hp = 100000.0
+	await _warte(1.0)
+	var sieht_getarnt: bool = tg._sicht
+	var frei_sicht: bool = tg._frei(schiff.global_position)
+	schiff.tarn_t = 0.0
+	await _warte(0.6)
+	ok = pruef.call("Tarnstart", frei_sicht and not sieht_getarnt and tg._sicht, "freie Sichtlinie %s; getarnt gesehen %s, danach gesehen %s" % [frei_sicht, sieht_getarnt, tg._sicht]) and ok
+	tg.set_physics_process(false)
+	tg.global_position = schiff.global_position + vor * 5.0
+	# Schockwelle: Treffer auf die Hülle
+	var hp0 := tg.hp
+	schiff.unverwundbar = false
+	schiff.schild = 0.0
+	schiff.treffer(5.0)
+	schiff.unverwundbar = true
+	ok = pruef.call("Schockwelle", is_equal_approx(hp0 - tg.hp, 25.0), "Gegner in 5 m: −%.0f" % (hp0 - tg.hp)) and ok
+	# Durchschlag + Kettenblitz: zwei Gegner hintereinander, ein dritter daneben
+	for g in get_tree().get_nodes_in_group("gegner"):
+		g.free()
+	schiff.pad_aktiv = false
+	var a := _testgegner("waechter", schiff.global_position + vor * 7.0, false)
+	var b2 := _testgegner("waechter", schiff.global_position + vor * 11.0, false)
+	var c := _testgegner("waechter", schiff.global_position + vor * 7.0 + schiff.global_basis.x * 5.0, false)
+	for g in [a, b2, c]:
+		g.hp = 100000.0
+	Geschoss.ketten_zaehler = Geschoss.KETTE_JEDER - 1
+	var ha := a.hp
+	var hb := b2.hp
+	var hc := c.hp
+	schiff.global_basis = Basis.looking_at(vor, Vector3.UP)
+	var start := schiff.global_position + vor * 1.5
+	var g1 := Geschoss.neu(start, vor, 90.0, 10.0, true, Color.RED)
+	g1.durchschlag = 1
+	g1.kette = true
+	level.add_child(g1)
+	await _warte(0.5)
+	ok = pruef.call("Durchschlag", ha - a.hp > 0.0 and hb - b2.hp > 0.0, "vorderer −%.0f, hinterer −%.0f" % [ha - a.hp, hb - b2.hp]) and ok
+	ok = pruef.call("Kettenblitz", hc - c.hp > 0.0, "Gegner daneben −%.0f" % (hc - c.hp)) and ok
+	for g in [a, b2, c]:
+		g.free()
+	# Abpraller: Schuss senkrecht auf die nächste Wand, danach fliegt er zurück
+	var wand := Vector3.ZERO
+	var beste := 999.0
+	for d in [Vector3.UP, Vector3.DOWN, Vector3.LEFT, Vector3.RIGHT, Vector3.FORWARD, Vector3.BACK]:
+		var q := PhysicsRayQueryParameters3D.create(schiff.global_position, schiff.global_position + d * 40.0, 1)
+		var t := schiff.get_world_3d().direct_space_state.intersect_ray(q)
+		if not t.is_empty() and t.position.distance_to(schiff.global_position) < beste:
+			beste = t.position.distance_to(schiff.global_position)
+			wand = d
+	var g2 := Geschoss.neu(schiff.global_position + wand * 1.0, wand, 40.0, 10.0, true, Color.RED)
+	g2.abprall = 1
+	g2.lebenszeit = 10.0
+	level.add_child(g2)
+	await _warte((beste + 2.0) / 40.0 + 0.1)
+	var zurueck := is_instance_valid(g2) and g2.geschw.dot(wand) < 0.0
+	ok = pruef.call("Abpraller", zurueck, "Wand in %.1f m, Bolzen danach unterwegs zurück %s" % [beste, zurueck]) and ok
+	if is_instance_valid(g2):
+		g2.free()
+	# Hangar mit teilweise erforschtem Baum
+	Meta.forschung = ["f_fokus", "f_durchschlag", "s_spulen", "b_sonde", "b_reserve", "t_tarn"]
+	Meta.rekord = 14
+	Meta.speichern()
+	_zeige_hangar()
+	hangar.reiter_waehlen("forschung")
+	await _warte(0.6)
+	var kn := hangar.find_child("Knopf_s_feld", true, false) as Button
+	if kn:
+		kn.grab_focus()
+	await _warte(0.2)
+	_foto("forschung_baum")
+	await _knopf_druck(JOY_BUTTON_A)
+	ok = pruef.call("Hangar", Meta.erforscht("s_feld") and Meta.forschungspunkte_frei() == 14 - 10, "Feldregeneration per A erforscht %s, frei %d" % [Meta.erforscht("s_feld"), Meta.forschungspunkte_frei()]) and ok
+	await _warte(0.3)
+	_foto("forschung_baum_danach")
+	for e in erg:
+		Protokoll.schreib("test", "Forschung: " + e)
+	Protokoll.schreib("test", "FORSCHUNG-TEST %s" % ("BESTANDEN" if ok else "FEHLGESCHLAGEN"))
+	Meta.zuruecksetzen()
 
 
 ## Bossjagd: Schiff im Bossraum zeigen, dann außer Sicht in einen Stollen setzen. Der Boss muss folgen.

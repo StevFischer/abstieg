@@ -7,7 +7,28 @@ var _pfad := "user://abstieg_meta.cfg"
 ## Stev 2026-10-10: „viel mehr Aufwertungen für die Langzeitmotivation“ — Kampf, Überleben, Wirtschaft,
 ## Werkzeuge; endlose Meisterschaft; an Bosse gekoppelt; Reiter nach Art.
 const REITER := [["schiff", "Schiff"], ["kampf", "Kampf"], ["ueberleben", "Überleben"],
-	["wirtschaft", "Wirtschaft"], ["werkzeuge", "Werkzeuge"]]
+	["wirtschaft", "Wirtschaft"], ["werkzeuge", "Werkzeuge"], ["forschung", "Forschung"]]
+## Forschungsbaum (Stev 2026-10-10: „ohne Scans einfach nur einen Forschungsbaum im Kaufmenü …
+## Punkte dafür gibt es pro Stufe, die man maximal erreicht hat“; Inhalt: nur Freischaltungen und Boni).
+## 1 Punkt je erreichter Rekordtiefe. "zeile"/"spalte": Platz im Baum, "vor": nötige Knoten.
+const FORSCHUNG := [
+	{"id": "f_fokus", "zweig": "Waffen", "zeile": 0, "spalte": 0, "name": "Fokuslinse", "text": "+8 % Laserschaden", "kosten": 1, "vor": []},
+	{"id": "f_durchschlag", "zweig": "Waffen", "zeile": 0, "spalte": 1, "name": "Durchschlag", "text": "Laserbolzen durchschlagen einen Gegner und fliegen weiter", "kosten": 2, "vor": ["f_fokus"]},
+	{"id": "f_abprall", "zweig": "Waffen", "zeile": 0, "spalte": 2, "name": "Abpraller", "text": "Laserbolzen prallen einmal von Wänden ab", "kosten": 3, "vor": ["f_durchschlag"]},
+	{"id": "f_kette", "zweig": "Waffen", "zeile": 0, "spalte": 3, "name": "Kettenblitz", "text": "Jeder 8. Lasertreffer springt mit halbem Schaden auf einen Gegner in 12 m", "kosten": 3, "vor": ["f_abprall", "s_daempfer"]},
+	{"id": "s_spulen", "zweig": "Schiff", "zeile": 1, "spalte": 0, "name": "Verstärkte Spulen", "text": "+15 Schild", "kosten": 1, "vor": []},
+	{"id": "s_feld", "zweig": "Schiff", "zeile": 1, "spalte": 1, "name": "Feldregeneration", "text": "Schild lädt auch im Flug 50 % schneller", "kosten": 2, "vor": ["s_spulen"]},
+	{"id": "s_daempfer", "zweig": "Schiff", "zeile": 1, "spalte": 2, "name": "Trägheitsdämpfer", "text": "+6 % Tempo und schnelleres Beschleunigen", "kosten": 2, "vor": ["s_feld"]},
+	{"id": "s_nano", "zweig": "Schiff", "zeile": 1, "spalte": 3, "name": "Nanoreparatur", "text": "Hülle repariert sich 0,5 je s, bis sie halb voll ist", "kosten": 3, "vor": ["s_daempfer", "b_magazin"]},
+	{"id": "b_sonde", "zweig": "Bergbau", "zeile": 2, "spalte": 0, "name": "Erzsonde", "text": "+1 Erz je Fund", "kosten": 1, "vor": []},
+	{"id": "b_reserve", "zweig": "Bergbau", "zeile": 2, "spalte": 1, "name": "Notreserve", "text": "Beim Tod bleibt das ganze Erz der Tiefe erhalten statt der Hälfte", "kosten": 2, "vor": ["b_sonde"]},
+	{"id": "b_magazin", "zweig": "Bergbau", "zeile": 2, "spalte": 2, "name": "Volle Magazine", "text": "Jede Tiefe beginnt mit vollen Raketen", "kosten": 2, "vor": ["b_reserve"]},
+	{"id": "b_schatz", "zweig": "Bergbau", "zeile": 2, "spalte": 3, "name": "Schatzsucher", "text": "Bosse lassen doppelt so viel Erz fallen", "kosten": 3, "vor": ["b_magazin", "t_ueberladung"]},
+	{"id": "t_tarn", "zweig": "Taktik", "zeile": 3, "spalte": 0, "name": "Tarnstart", "text": "In den ersten 5 s jeder Tiefe sehen Gegner dich nicht", "kosten": 1, "vor": []},
+	{"id": "t_sparer", "zweig": "Taktik", "zeile": 3, "spalte": 1, "name": "Raketensparer", "text": "25 % Chance, dass eine Rakete keine Munition kostet", "kosten": 2, "vor": ["t_tarn"]},
+	{"id": "t_ueberladung", "zweig": "Taktik", "zeile": 3, "spalte": 2, "name": "Überladung", "text": "Nach jedem Abschuss 3 s lang +25 % Feuerrate", "kosten": 2, "vor": ["t_sparer"]},
+	{"id": "t_schock", "zweig": "Taktik", "zeile": 3, "spalte": 3, "name": "Schockwelle", "text": "Trifft etwas die Hülle, stößt eine Welle Gegner in 8 m weg (25 Schaden), alle 6 s", "kosten": 3, "vor": ["t_ueberladung"]},
+]
 const AUFRUESTUNGEN := [
 	{"id": "schild", "art": "schiff", "name": "Schildgenerator", "text": "+25 Schild", "kosten": 40, "max": 8, "pro": 25.0, "meister": 5.0, "boss": 0},
 	{"id": "panzerung", "art": "schiff", "name": "Panzerung", "text": "+25 Hülle", "kosten": 40, "max": 8, "pro": 25.0, "meister": 5.0, "boss": 0},
@@ -36,6 +57,7 @@ var start_tiefe := 1       ## im Hangar gewählte Starttiefe: 1 oder direkt nach
 var laeufe := 0
 var stufen := {}
 var waffen: Array = []     ## freigeschaltete Waffen-IDs, zusätzlich zu Waffen.START
+var forschung: Array = []  ## erforschte Knoten-IDs
 var waffen_stufen := {}    ## Version je Waffe (1 = Mk I); fehlt ein Eintrag, ist es Mk I
 ## Spielzeit wie bei Steam: Zeit, in der das Spiel offen ist (auch Hangar/Pause). Übersteht „Neues Spiel“.
 var spielzeit := 0.0       ## Sekunden insgesamt
@@ -141,6 +163,49 @@ func wert(id: String) -> float:
 	return mini(stufe(id), int(a.max)) * float(a.pro) + meisterstufe(id) * float(a.meister)
 
 
+func forschung_def(id: String) -> Dictionary:
+	for k in FORSCHUNG:
+		if k.id == id:
+			return k
+	return {}
+
+
+func erforscht(id: String) -> bool:
+	return id in forschung
+
+
+## Forschungspunkte: 1 je erreichter Rekordtiefe, abzüglich der ausgegebenen.
+func forschungspunkte_gesamt() -> int:
+	return rekord
+
+
+func forschungspunkte_frei() -> int:
+	var aus := 0
+	for id in forschung:
+		aus += int(forschung_def(id).kosten)
+	return forschungspunkte_gesamt() - aus
+
+
+func voraussetzungen_erfuellt(id: String) -> bool:
+	for v in forschung_def(id).vor:
+		if not erforscht(v):
+			return false
+	return true
+
+
+func erforschbar(id: String) -> bool:
+	return not erforscht(id) and voraussetzungen_erfuellt(id) and forschungspunkte_frei() >= int(forschung_def(id).kosten)
+
+
+func erforschen(id: String) -> bool:
+	if not erforschbar(id):
+		return false
+	forschung.append(id)
+	speichern()
+	Protokoll.schreib("meta", "erforscht %s, frei noch %d Punkte" % [id, forschungspunkte_frei()])
+	return true
+
+
 ## Wirkung bei einer bestimmten Stufe — für den Tooltip „jetzt → nächste Stufe“.
 func wert_bei(id: String, st: int) -> float:
 	var a := _def(id)
@@ -231,11 +296,11 @@ func waffe_verbessern(id: String) -> bool:
 
 func schiffswerte() -> Dictionary:
 	return {
-		"schild_max": 50.0 + wert("schild"),
+		"schild_max": 50.0 + wert("schild") + (15.0 if erforscht("s_spulen") else 0.0),
 		"huelle_max": 100.0 + wert("panzerung"),
-		"tempo": 14.0 * (1.0 + wert("triebwerk")),
+		"tempo": 14.0 * (1.0 + wert("triebwerk")) * (1.06 if erforscht("s_daempfer") else 1.0),
 		"raketen_max": 4 + int(wert("raketen")),
-		"laser_mult": 1.0 + wert("laserschaden"),
+		"laser_mult": (1.0 + wert("laserschaden")) * (1.08 if erforscht("f_fokus") else 1.0),
 		"feuerrate": 1.0 + wert("feuerrate"),
 		"raketen_mult": 1.0 + wert("raketenschaden"),
 		"krit": minf(wert("kritisch"), 0.6),
@@ -250,6 +315,7 @@ func schiffswerte() -> Dictionary:
 		"nachbrenner_cd": 0.0 if stufe("nachbrenner") == 0 else 9.0 - 1.5 * (stufe("nachbrenner") - 1),
 		"flucht_mult": 1.0 + wert("fluchtzeit"),
 		"radar": 0.0 if stufe("radar") == 0 else 25.0 + 10.0 * (stufe("radar") - 1),
+		"forschung": forschung.duplicate(),
 	}
 
 
@@ -280,6 +346,7 @@ func zuruecksetzen() -> void:
 	stufen = {}
 	waffen = []
 	waffen_stufen = {}
+	forschung = []
 	speichern()
 
 
@@ -294,6 +361,7 @@ func laden() -> void:
 	stufen = c.get_value("meta", "stufen", {})
 	waffen = c.get_value("meta", "waffen", [])
 	waffen_stufen = c.get_value("meta", "waffen_stufen", {})
+	forschung = c.get_value("meta", "forschung", [])
 	spielzeit = c.get_value("meta", "spielzeit", 0.0)
 	spielzeit_tage = c.get_value("meta", "spielzeit_tage", {})
 	zuletzt = c.get_value("meta", "zuletzt", 0)
@@ -332,6 +400,7 @@ func speichern() -> void:
 	c.set_value("meta", "stufen", stufen)
 	c.set_value("meta", "waffen", waffen)
 	c.set_value("meta", "waffen_stufen", waffen_stufen)
+	c.set_value("meta", "forschung", forschung)
 	c.set_value("meta", "spielzeit", spielzeit)
 	c.set_value("meta", "spielzeit_tage", spielzeit_tage)
 	c.set_value("meta", "zuletzt", int(Time.get_unix_time_from_system()) if spielzeit > 0.0 else zuletzt)

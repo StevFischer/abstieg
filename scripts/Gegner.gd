@@ -260,7 +260,7 @@ func _physics_process(dt: float) -> void:
 	var dist := zum.length()
 	if _sicht_t <= 0.0:
 		_sicht_t = 0.25
-		_sicht = dist < 55.0 and _frei(ziel.global_position)
+		_sicht = dist < 55.0 and _frei(ziel.global_position) and not (ziel is Schiff and ziel.getarnt())
 	if _sicht:
 		if not _alarm:
 			_alarm = true

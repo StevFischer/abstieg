@@ -8,7 +8,9 @@ signal optionen
 
 const ORANGE := Color(1.0, 0.6, 0.2)
 const ART_FARBE := {"kampf": Color(1.0, 0.35, 0.3), "ueberleben": Color(0.4, 0.75, 1.0),
-	"wirtschaft": Color(1.0, 0.82, 0.3), "werkzeuge": Color(0.35, 0.95, 0.85)}
+	"wirtschaft": Color(1.0, 0.82, 0.3), "werkzeuge": Color(0.35, 0.95, 0.85), "forschung": Color(0.75, 0.55, 1.0)}
+const ZWEIG_FARBE := {"Waffen": Color(1.0, 0.35, 0.3), "Schiff": Color(0.4, 0.75, 1.0),
+	"Bergbau": Color(1.0, 0.82, 0.3), "Taktik": Color(0.35, 0.95, 0.85)}
 
 var _reiter := "schiff"          ## gewählter Aufrüstungs-Reiter, bleibt über Käufe hinweg
 
@@ -81,6 +83,10 @@ func aufbauen() -> void:
 	for a in Meta.AUFRUESTUNGEN:
 		if a.art == _reiter:
 			raster.add_child(_aufruestkarte(a))
+	if _reiter == "forschung":
+		links.remove_child(raster)
+		raster.queue_free()
+		_forschungsbaum(links)
 	_info = _label("Steuerkreuz/Maus auf eine Karte: Name und Werte erscheinen hier.", 17, Color(0.7, 0.68, 0.6), true)
 	_info.custom_minimum_size = Vector2(0, 52)
 	_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -192,6 +198,11 @@ func _reiter_zeile(links: VBoxContainer) -> void:
 				frei = frei or Meta.freigeschaltet(a.id)
 				if Meta.kaufbar(a.id):
 					neu += 1
+		if id == "forschung":
+			frei = true
+			for k in Meta.FORSCHUNG:
+				if Meta.erforschbar(k.id):
+					neu += 1
 		b.text = r[1] + (" · %d" % neu if neu > 0 else "")
 		if not frei:
 			b.add_theme_color_override("font_color", Color(0.45, 0.45, 0.45))
@@ -200,7 +211,7 @@ func _reiter_zeile(links: VBoxContainer) -> void:
 		b.button_pressed = id == _reiter
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.custom_minimum_size = Vector2(0, 36)
-		b.add_theme_font_size_override("font_size", 16)
+		b.add_theme_font_size_override("font_size", 15)
 		var farbe: Color = ART_FARBE.get(id, ORANGE)
 		var gedrueckt := StyleBoxFlat.new()
 		gedrueckt.bg_color = Color(farbe.r * 0.22, farbe.g * 0.22, farbe.b * 0.22)
@@ -216,6 +227,72 @@ func _reiter_zeile(links: VBoxContainer) -> void:
 		b.tooltip_text = "Kaufbar: %d" % neu if frei else "Wird mit einem besiegten Boss freigeschaltet."
 		b.pressed.connect(func(): reiter_waehlen(id))
 		reihe.add_child(b)
+
+
+## Forschungsbaum: vier Zweige als Zeilen, Knoten als Knöpfe, Linien zu den Voraussetzungen.
+## Erforscht = gefüllt, erforschbar = leuchtender Rand, sonst abgedunkelt.
+func _forschungsbaum(links: VBoxContainer) -> void:
+	links.add_child(_label("Forschungspunkte: %d frei   ·   1 Punkt je erreichter Tiefe (Rekord %d)" % [
+		Meta.forschungspunkte_frei(), Meta.rekord], 17, ART_FARBE.forschung, false))
+	var flaeche := Control.new()
+	flaeche.name = "Forschungsbaum"
+	var bw := 166.0
+	var bh := 54.0
+	var dx := 182.0
+	var dy := 64.0
+	flaeche.custom_minimum_size = Vector2(dx * 3 + bw, dy * 3 + bh)
+	links.add_child(flaeche)
+	var pos := {}
+	for k in Meta.FORSCHUNG:
+		pos[k.id] = Vector2(k.spalte * dx, k.zeile * dy)
+	# Linien hinter den Knöpfen
+	var linien := Control.new()
+	linien.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	linien.set_anchors_preset(Control.PRESET_FULL_RECT)
+	linien.draw.connect(func():
+		for k in Meta.FORSCHUNG:
+			for v in k.vor:
+				var a: Vector2 = pos[v] + Vector2(bw, bh) / 2.0
+				var b: Vector2 = pos[k.id] + Vector2(bw, bh) / 2.0
+				var an := Meta.erforscht(v)
+				linien.draw_line(a, b, Color(0.75, 0.55, 1.0, 0.9) if an else Color(0.4, 0.4, 0.45, 0.6), 3.0 if an else 2.0, true))
+	flaeche.add_child(linien)
+	for k in Meta.FORSCHUNG:
+		var id: String = k.id
+		var farbe: Color = ZWEIG_FARBE.get(k.zweig, ORANGE)
+		var b := Button.new()
+		b.name = "Knopf_" + id
+		b.position = pos[id]
+		b.size = Vector2(bw, bh)
+		b.custom_minimum_size = Vector2(bw, bh)
+		b.add_theme_font_size_override("font_size", 14)
+		var stil := StyleBoxFlat.new()
+		stil.set_corner_radius_all(6)
+		stil.set_border_width_all(2)
+		var fertig := Meta.erforscht(id)
+		var moeglich := Meta.erforschbar(id)
+		if fertig:
+			stil.bg_color = Color(farbe.r * 0.45, farbe.g * 0.45, farbe.b * 0.45)
+			stil.border_color = farbe
+			b.text = "%s\n✓ erforscht" % k.name
+		else:
+			stil.bg_color = Color(farbe.r * 0.1, farbe.g * 0.1, farbe.b * 0.1)
+			stil.border_color = farbe if moeglich else Color(farbe, 0.3)
+			b.text = "%s\n%d Punkt%s" % [k.name, k.kosten, "" if int(k.kosten) == 1 else "e"]
+		for zustand in ["normal", "hover", "pressed", "focus"]:
+			var st := stil.duplicate() as StyleBoxFlat
+			if zustand in ["hover", "focus"]:
+				st.border_color = Color.WHITE
+			b.add_theme_stylebox_override(zustand, st)
+		var vor_namen: Array = k.vor.map(func(v): return Meta.forschung_def(v).name)
+		var tip := "%s  (%s)\n%s\nKosten: %d Punkt%s%s" % [k.name, k.zweig, k.text, k.kosten, "" if int(k.kosten) == 1 else "e",
+			("\nBraucht: " + ", ".join(vor_namen)) if not vor_namen.is_empty() else ""]
+		var warum := "Schon erforscht" if fertig else ("Erst " + ", ".join(vor_namen) + " erforschen" if not Meta.voraussetzungen_erfuellt(id) else "Zu wenig Forschungspunkte")
+		b.tooltip_text = tip
+		_knopf(b, moeglich, tip, func(): return Meta.erforschen(id), warum)
+		if fertig:
+			b.modulate = Color.WHITE
+		flaeche.add_child(b)
 
 
 func reiter_waehlen(id: String) -> void:
@@ -403,7 +480,9 @@ var _fokus_merken := ""
 func _info_zeigen(text: String, warnung := false) -> void:
 	if _info == null or not is_instance_valid(_info):
 		return
-	_info.text = text
+	# Höchstens zwei Zeilen, damit das Feld die Seite nicht nach unten schiebt: ab Zeile 2 alles in eine Zeile.
+	var zeilen := text.split("\n")
+	_info.text = zeilen[0] if zeilen.size() == 1 else zeilen[0] + "\n" + "   ·   ".join(zeilen.slice(1))
 	_info.add_theme_color_override("font_color", Color(1.0, 0.5, 0.4) if warnung else Color(0.92, 0.9, 0.82))
 
 

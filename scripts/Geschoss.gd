@@ -18,6 +18,14 @@ var flaeche := 0.0        ## > 0: Flächenschaden in diesem Radius, nimmt nach a
 var splitter := 0         ## > 0: beim Einschlag so viele kleine Zielsucher
 var rundum := false       ## Zielsuche in alle Richtungen (Splitter), sonst nur nach vorn
 var _ziel: Node3D
+## Forschung (nur Spielerlaser): durchschlagen / abprallen / Kettenblitz
+var durchschlag := 0
+var abprall := 0
+var kette := false
+static var ketten_zaehler := 0
+const KETTE_JEDER := 8
+const KETTE_WEITE := 12.0
+var _ausgenommen: Array[RID] = []
 
 
 static func neu(pos: Vector3, richtung: Vector3, tempo: float, p_schaden: float, p_vom_spieler: bool,
@@ -71,9 +79,32 @@ func _physics_process(dt: float) -> void:
 	var nach := von + geschw * dt
 	var maske := EBENE_WELT | (EBENE_GEGNER if vom_spieler else EBENE_SPIELER)
 	var q := PhysicsRayQueryParameters3D.create(von, nach, maske)
+	q.exclude = _ausgenommen
 	var treffer := get_world_3d().direct_space_state.intersect_ray(q)
 	if not treffer.is_empty():
 		var obj: Object = treffer.collider
+		var ist_ziel := obj != null and (obj.has_method("treffer_von") or obj.has_method("treffer"))
+		# Abpraller: von der Wand zurück statt zerplatzen
+		if not ist_ziel and abprall > 0:
+			abprall -= 1
+			geschw = geschw.bounce(treffer.normal)
+			global_position = treffer.position + treffer.normal * 0.05
+			Effekte.explosion(get_parent(), treffer.position, farbe, 0.4)
+			_ausrichten()
+			return
+		if ist_ziel and kette:
+			_kettenblitz(obj)
+		# Durchschlag: Schaden machen, den Gegner ausnehmen und weiterfliegen
+		if ist_ziel and durchschlag > 0 and flaeche <= 0.0:
+			durchschlag -= 1
+			if obj.has_method("treffer_von"):
+				obj.treffer_von(schaden, geschw)
+			else:
+				obj.treffer(schaden)
+			Effekte.explosion(get_parent(), treffer.position, farbe, 0.5)
+			_ausgenommen.append(treffer.rid)
+			global_position = treffer.position
+			return
 		if obj != null and flaeche <= 0.0:
 			if obj.has_method("treffer_von"):
 				obj.treffer_von(schaden, geschw)
@@ -89,6 +120,28 @@ func _physics_process(dt: float) -> void:
 		return
 	global_position = nach
 	_ausrichten()
+
+
+## Jeder KETTE_JEDER-te Treffer springt mit halbem Schaden auf den nächsten anderen Gegner.
+func _kettenblitz(getroffen: Object) -> void:
+	ketten_zaehler += 1
+	if ketten_zaehler % KETTE_JEDER != 0:
+		return
+	var bestes: Node3D = null
+	var best_d := KETTE_WEITE
+	for z in get_tree().get_nodes_in_group("gegner"):
+		if z == getroffen:
+			continue
+		var d: float = z.global_position.distance_to(global_position)
+		if d < best_d:
+			best_d = d
+			bestes = z
+	if bestes == null:
+		return
+	bestes.treffer(schaden * 0.5)
+	# sichtbarer Sprung: kleine Blitze entlang der Linie
+	for i in 4:
+		Effekte.explosion(get_parent(), global_position.lerp(bestes.global_position, (i + 1) / 4.0), Color(0.6, 0.85, 1.0), 0.5)
 
 
 func _flaechenschaden(mitte: Vector3) -> void:
