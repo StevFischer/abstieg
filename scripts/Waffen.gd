@@ -50,7 +50,7 @@ static func schaden_faktor(stufe: int) -> float:
 ## Preis für die nächste Version (von stufe auf stufe + 1).
 static func verbessern_preis(id: String, stufe: int) -> int:
 	var basis := maxf(60.0, float(finde(id).preis) * 0.6)
-	return int(round(basis * pow(1.6, stufe - 1)))
+	return int(round(basis * pow(2.0, stufe - 1)))      # ×2 je Version (vorher ×1,6), Stev 2026-10-10
 
 
 static func finde(id: String) -> Dictionary:

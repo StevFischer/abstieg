@@ -1652,9 +1652,19 @@ func _aufwertungs_test() -> void:
 	Meta.rekord = 16
 	Meta.bank = 999999
 	Meta.stufen = {"laserschaden": 10}
-	var k_soll := int(round(50 * pow(1.6, 8) * pow(1.15, 2)))
+	var k_soll := int(round(50 * pow(Meta.PREIS_FAKTOR, 8) * pow(Meta.MEISTER_FAKTOR, 2)))
 	ok = pruef.call("Meisterschaft", is_equal_approx(Meta.wert("laserschaden"), 0.84) and Meta.kosten("laserschaden") == k_soll and Meta.kaufbar("laserschaden"),
 		"Stufe 10 (8 + Meister 2) → +%.0f %% Schaden, nächste kostet %d (soll %d), kaufbar %s" % [Meta.wert("laserschaden") * 100, Meta.kosten("laserschaden"), k_soll, Meta.kaufbar("laserschaden")]) and ok
+	# Preiskurve ×2,0: Schild Stufe 1/4/8 kostet 40/320/5120, Streufeuer Mk II→III 72→144
+	Meta.stufen = {}
+	var p1 := Meta.kosten("schild")
+	Meta.stufen = {"schild": 3}
+	var p4 := Meta.kosten("schild")
+	Meta.stufen = {"schild": 7}
+	var p8 := Meta.kosten("schild")
+	Meta.stufen = {"laserschaden": 10}
+	ok = pruef.call("Preiskurve", p1 == 40 and p4 == 320 and p8 == 5120 and Waffen.verbessern_preis("streu", 2) == 2 * Waffen.verbessern_preis("streu", 1),
+		"Schild 40/%d/%d, Streufeuer Mk %d → %d" % [p4, p8, Waffen.verbessern_preis("streu", 1), Waffen.verbessern_preis("streu", 2)]) and ok
 	ok = pruef.call("Ohne Meister", Meta.stufen.size() == 1 and (func(): Meta.stufen["magnet"] = 3; return Meta.ausgereizt("magnet")).call(),
 		"Magnet Stufe 3/3 ausgereizt") and ok
 	# Alles auf eine Teststufe

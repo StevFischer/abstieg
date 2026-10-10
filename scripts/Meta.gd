@@ -47,15 +47,19 @@ const PAKT_MEILENSTEINE := [[5, 3], [10, 4]]     ## [Paktpunkte, Seltenheit des 
 ## und Modulverbesserung). Vier Gebäude, je drei Stufen; Kosten je Stufe [Erz, Kristalle, Bauteile].
 const GEBAEUDE := [
 	{"id": "raffinerie", "name": "Raffinerie", "text": "liefert nach jedem Lauf Erz: 25 / 60 / 120",
-		"kosten": [[300, 10, 5], [700, 25, 15], [1500, 50, 35]]},
+		"kosten": [[300, 10, 5], [900, 30, 15], [2700, 90, 45]]},          # Gebäude ×3 je Stufe (vorher ~×2,3)
 	{"id": "werkstatt", "name": "Werkstatt", "text": "Module aufwerten, +15 % je Mal: bis 1 / 2 / 3-mal",
-		"kosten": [[250, 15, 10], [600, 35, 25], [1300, 70, 50]]},
+		"kosten": [[250, 15, 10], [750, 45, 30], [2250, 135, 90]]},
 	{"id": "labor", "name": "Labor", "text": "+2 Forschungspunkte je Stufe",
-		"kosten": [[400, 20, 10], [900, 45, 25], [1800, 90, 50]]},
+		"kosten": [[400, 20, 10], [1200, 60, 30], [3600, 180, 90]]},
 	{"id": "lager", "name": "Lager", "text": "+8 Inventarplätze für Module je Stufe",
-		"kosten": [[200, 10, 5], [450, 25, 12], [900, 50, 25]]},
+		"kosten": [[200, 10, 5], [600, 30, 15], [1800, 90, 45]]},
 ]
 const RAFFINERIE_ERTRAG := [0, 25, 60, 120]
+## Preisanstieg je Stufe (Stev 2026-10-10: „höhere Stufen deutlich teurer, sonst hat man zu schnell alles“;
+## gewählt ×2,0 statt ×1,6). Erste Stufe bleibt gleich billig. Meisterstufen ×1,25 statt ×1,15.
+const PREIS_FAKTOR := 2.0
+const MEISTER_FAKTOR := 1.25
 const AUFRUESTUNGEN := [
 	{"id": "schild", "art": "schiff", "name": "Schildgenerator", "text": "+25 Schild", "kosten": 40, "max": 8, "pro": 25.0, "meister": 5.0, "boss": 0},
 	{"id": "panzerung", "art": "schiff", "name": "Panzerung", "text": "+25 Hülle", "kosten": 40, "max": 8, "pro": 25.0, "meister": 5.0, "boss": 0},
@@ -173,15 +177,15 @@ func _def(id: String) -> Dictionary:
 	return {}
 
 
-## Stufen über "max" sind Meisterstufen (nur wo "meister" > 0). Kosten: ×1,6 je Stufe bis zum Maximum,
-## danach ×1,15 je Meisterstufe — Erz hat so immer einen Zweck, der Zuwachs bleibt klein.
+## Stufen über "max" sind Meisterstufen (nur wo "meister" > 0). Kosten: ×PREIS_FAKTOR je Stufe bis zum Maximum,
+## danach ×MEISTER_FAKTOR je Meisterstufe — Erz hat so immer einen Zweck, der Zuwachs bleibt klein.
 func kosten(id: String) -> int:
 	var a := _def(id)
 	var st := stufe(id)
 	var mx := int(a.max)
 	if st < mx:
-		return int(round(a.kosten * pow(1.6, st)))
-	return int(round(a.kosten * pow(1.6, mx) * pow(1.15, st - mx)))
+		return int(round(a.kosten * pow(PREIS_FAKTOR, st)))
+	return int(round(a.kosten * pow(PREIS_FAKTOR, mx) * pow(MEISTER_FAKTOR, st - mx)))
 
 
 func meisterstufe(id: String) -> int:
