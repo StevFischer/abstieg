@@ -10,6 +10,10 @@ const MAUS := 0.0022
 const PAD_DREH := 2.6
 const ROLL := 2.2
 const AUTOPILOT_TEMPO := 12.0
+## Schild lädt sich von selbst auf, aber erst nach einer Pause ohne Treffer — und langsam:
+## 1,5 je Sekunde heißt gut eine Minute von leer bis voll (100). Ein Treffer setzt die Pause zurück.
+const SCHILD_PAUSE := 5.0
+const SCHILD_LADEN := 1.5
 
 var schild_max := 100.0
 var schild := 100.0
@@ -31,6 +35,7 @@ var _maus := Vector2.ZERO
 var _laser_cd := 0.0
 var _raketen_cd := 0.0
 var _seite := 1.0
+var _seit_treffer := 0.0
 
 
 func _init() -> void:
@@ -98,6 +103,15 @@ func _physics_process(dt: float) -> void:
 	move_and_slide()
 	_waffen(dt)
 	energie = minf(energie_max, energie + energie_regen * dt)
+	schild_laden(dt)
+
+
+func schild_laden(dt: float) -> void:
+	if not aktiv:
+		return
+	_seit_treffer += dt
+	if _seit_treffer >= SCHILD_PAUSE:
+		schild = minf(schild_max, schild + SCHILD_LADEN * dt)
 
 
 func _waffen(dt: float) -> void:
@@ -154,6 +168,7 @@ func treffer(s: float) -> void:
 	if unverwundbar or not aktiv:
 		return
 	schild -= s
+	_seit_treffer = 0.0
 	getroffen.emit(s)
 	if schild <= 0.0:
 		schild = 0.0
