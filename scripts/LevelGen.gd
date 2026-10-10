@@ -8,6 +8,7 @@ extends RefCounted
 
 const ZELLE := 6.0
 const BOSS_RAUM := Vector3i(5, 3, 5)
+const REAKTOR_RAUM := Vector3i(4, 3, 4)   ## Stev: „Reaktor immer in großem Raum“ (24 × 18 × 24 m)
 const RICHTUNGEN: Array[Vector3i] = [
 	Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0),
 	Vector3i(0, -1, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1)]
@@ -40,14 +41,15 @@ func erzeuge(p_saat: int, p_tiefe: int) -> void:
 		versuche += 1
 		_anbauen()
 	_reaktor_waehlen()
-	if ist_boss_tiefe(p_tiefe):
-		# Großer Bossraum am tiefsten Punkt des Baums: dort steht der Reaktor mit seinem Wächter.
-		var tiefster := reaktor_raum
-		for i in 600:
-			var quelle := tiefster if i < 300 else rng.randi_range(0, raeume.size() - 1)
-			if _anbauen(BOSS_RAUM, quelle):
-				reaktor_raum = raeume.size() - 1
-				break
+	# Der Reaktor steht immer in einem großen Raum am tiefsten Punkt des Baums; in Boss-Tiefen
+	# noch größer, weil dort zusätzlich der Boss kämpft.
+	var gross := BOSS_RAUM if ist_boss_tiefe(p_tiefe) else REAKTOR_RAUM
+	var tiefster := reaktor_raum
+	for i in 600:
+		var quelle := tiefster if i < 300 else rng.randi_range(0, raeume.size() - 1)
+		if _anbauen(gross, quelle):
+			reaktor_raum = raeume.size() - 1
+			break
 	_saeulen()
 
 

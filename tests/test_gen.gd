@@ -34,11 +34,11 @@ func _init() -> void:
 			if g.fluchtzeit() < 8.0 or g.fluchtzeit() > 300.0:
 				fehler += 1
 				print("FEHLER Fluchtzeit %.0f: Tiefe %d Saat %d" % [g.fluchtzeit(), tiefe, saat])
-			if g.ist_boss_tiefe(tiefe):
-				pruefungen += 1
-				if g.raeume[g.reaktor_raum].groesse != g.BOSS_RAUM:
-					fehler += 1
-					print("FEHLER Boss-Tiefe %d Saat %d ohne Bossraum (Reaktorraum %s)" % [tiefe, saat, g.raeume[g.reaktor_raum].groesse])
+			pruefungen += 1
+			var soll: Vector3i = g.BOSS_RAUM if g.ist_boss_tiefe(tiefe) else g.REAKTOR_RAUM
+			if g.raeume[g.reaktor_raum].groesse != soll:
+				fehler += 1
+				print("FEHLER Tiefe %d Saat %d: Reaktorraum %s statt %s" % [tiefe, saat, g.raeume[g.reaktor_raum].groesse, soll])
 			abdruecke[g.fingerabdruck()] = true
 	pruefungen += 1
 	if abdruecke.size() != laeufe:
