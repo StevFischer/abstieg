@@ -40,7 +40,7 @@ func aufbauen() -> void:
 	mitte.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(mitte)
 	var spalte := VBoxContainer.new()
-	spalte.add_theme_constant_override("separation", 14)
+	spalte.add_theme_constant_override("separation", 10)
 	spalte.custom_minimum_size = Vector2(1500, 0)
 	mitte.add_child(spalte)
 
@@ -79,6 +79,7 @@ func aufbauen() -> void:
 	_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	spalte.add_child(_info)
 	spalte.add_child(HSeparator.new())
+	_starttiefe_zeile(spalte)
 	var los := Button.new()
 	los.text = "ABSTIEG BEGINNEN"
 	los.custom_minimum_size = Vector2(0, 64)
@@ -86,6 +87,11 @@ func aufbauen() -> void:
 	los.pressed.connect(func(): starten.emit())
 	spalte.add_child(los)
 	erster = los
+	# Steuerkreuz: vom Startknopf hoch auf die gewählte Starttiefe, von dort runter zurück.
+	for b in _start_knoepfe:
+		b.focus_neighbor_bottom = b.get_path_to(los)
+		if b.button_pressed:
+			los.focus_neighbor_top = los.get_path_to(b)
 	var opt := Button.new()
 	opt.text = "Optionen"
 	opt.custom_minimum_size = Vector2(0, 40)
@@ -331,6 +337,60 @@ func _tooltip(w: Dictionary, besitzt: bool, mk: int) -> String:
 	elif not besitzt:
 		zeilen.append("Noch nicht freigeschaltet")
 	return "\n".join(zeilen)
+
+
+## Starttiefe: von vorne oder direkt nach einem schon besiegten Boss (6, 11, …).
+## Knöpfe in einer Reihe, damit sie mit dem Steuerkreuz erreichbar sind.
+var _start_knoepfe: Array[Button] = []
+
+
+func _starttiefe_zeile(spalte: VBoxContainer) -> void:
+	_start_knoepfe.clear()
+	var reihe := HFlowContainer.new()
+	reihe.alignment = FlowContainer.ALIGNMENT_CENTER
+	reihe.add_theme_constant_override("h_separation", 10)
+	reihe.add_theme_constant_override("v_separation", 8)
+	reihe.name = "Starttiefen"
+	spalte.add_child(reihe)
+	var titel := _label("STARTTIEFE", 20, ORANGE, false)
+	titel.custom_minimum_size = Vector2(150, 0)
+	titel.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	reihe.add_child(titel)
+	var gruppe := ButtonGroup.new()
+	var gewaehlt := Meta.gueltige_starttiefe()
+	for t in Meta.starttiefen():
+		var b := Button.new()
+		b.name = "Start_%d" % t
+		b.text = "Tiefe 1 · von vorne" if t == 1 else "Tiefe %d · nach Boss %d" % [t, t - 1]
+		b.toggle_mode = true
+		b.button_group = gruppe
+		b.button_pressed = t == gewaehlt
+		b.custom_minimum_size = Vector2(0, 40)
+		b.add_theme_font_size_override("font_size", 18)
+		# Die gewählte Tiefe orange umrandet und beschriftet, damit sie ohne Fokus erkennbar ist.
+		var gedrueckt := StyleBoxFlat.new()
+		gedrueckt.bg_color = Color(0.25, 0.14, 0.05)
+		gedrueckt.set_border_width_all(2)
+		gedrueckt.border_color = ORANGE
+		# Gleiche Innenabstände wie der normale Knopf: sonst passt die Breite nach dem Umschalten nicht mehr.
+		var normal := b.get_theme_stylebox("normal")
+		for seite in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
+			gedrueckt.set_content_margin(seite, normal.get_content_margin(seite))
+		b.add_theme_stylebox_override("pressed", gedrueckt)
+		b.add_theme_stylebox_override("hover_pressed", gedrueckt)
+		b.add_theme_color_override("font_pressed_color", ORANGE)
+		b.add_theme_color_override("font_hover_pressed_color", ORANGE)
+		b.add_theme_color_override("font_focus_color", Color.WHITE)
+		var tip := "Der Lauf beginnt in Tiefe %d." % t
+		b.tooltip_text = tip
+		b.focus_entered.connect(func(): _info_zeigen(tip))
+		b.pressed.connect(func():
+			Meta.start_tiefe = t
+			Meta.speichern())
+		reihe.add_child(b)
+		_start_knoepfe.append(b)
+	if Meta.starttiefen().size() == 1:
+		reihe.add_child(_label("Weitere Starttiefen nach dem ersten besiegten Boss (Tiefe 5).", 16, Color(0.6, 0.58, 0.52), false))
 
 
 func _label(text: String, groesse: int, farbe: Color, zentriert: bool) -> Label:

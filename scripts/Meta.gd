@@ -11,6 +11,7 @@ const AUFRUESTUNGEN := [
 
 var bank := 0
 var rekord := 0
+var start_tiefe := 1       ## im Hangar gewählte Starttiefe: 1 oder direkt nach einem besiegten Boss
 var laeufe := 0
 var stufen := {}
 var waffen: Array = []     ## freigeschaltete Waffen-IDs, zusätzlich zu Waffen.START
@@ -165,11 +166,28 @@ func schiffswerte() -> Dictionary:
 
 
 ## Neues Spiel: alles auf null, außer den Lautstärke-Einstellungen (die liegen in einer eigenen Datei).
+## Wählbare Starttiefen: 1 und jede Tiefe direkt nach einem Boss, die schon erreicht wurde
+## (Tiefe 6 erreicht heißt: der Boss auf Tiefe 5 ist besiegt, sonst wäre der Reaktor nicht gefallen).
+func starttiefen() -> Array[int]:
+	var aus: Array[int] = [1]
+	var t := 6
+	while t <= rekord:
+		aus.append(t)
+		t += 5
+	return aus
+
+
+## Die gemerkte Starttiefe, falls sie (noch) wählbar ist — sonst 1.
+func gueltige_starttiefe() -> int:
+	return start_tiefe if start_tiefe in starttiefen() else 1
+
+
 func zuruecksetzen() -> void:
 	Protokoll.schreib("meta", "Neues Spiel: vorher Bank %d, Rekord %d, Läufe %d, Stufen %s, Waffen %s" % [
 		bank, rekord, laeufe, stufen, waffen])
 	bank = 0
 	rekord = 0
+	start_tiefe = 1
 	laeufe = 0
 	stufen = {}
 	waffen = []
@@ -183,6 +201,7 @@ func laden() -> void:
 		return
 	bank = c.get_value("meta", "bank", 0)
 	rekord = c.get_value("meta", "rekord", 0)
+	start_tiefe = c.get_value("meta", "start_tiefe", 1)
 	laeufe = c.get_value("meta", "laeufe", 0)
 	stufen = c.get_value("meta", "stufen", {})
 	waffen = c.get_value("meta", "waffen", [])
@@ -220,6 +239,7 @@ func speichern() -> void:
 	var c := ConfigFile.new()
 	c.set_value("meta", "bank", bank)
 	c.set_value("meta", "rekord", rekord)
+	c.set_value("meta", "start_tiefe", start_tiefe)
 	c.set_value("meta", "laeufe", laeufe)
 	c.set_value("meta", "stufen", stufen)
 	c.set_value("meta", "waffen", waffen)

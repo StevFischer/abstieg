@@ -96,7 +96,7 @@ func _zeige_hangar() -> void:
 func _starte_lauf() -> void:
 	Meta.laeufe += 1
 	Meta.speichern()
-	tiefe = 1
+	tiefe = Meta.gueltige_starttiefe()
 	lauf_erz = 0
 	schiff = Schiff.new()
 	schiff.werte_setzen(Meta.schiffswerte())
@@ -115,7 +115,7 @@ func _starte_lauf() -> void:
 	spiel.add_child(schiff)
 	hangar_ebene.visible = false
 	hud.visible = true
-	Protokoll.schreib("lauf", "Lauf %d beginnt, Werte %s, Waffen %s + %s" % [Meta.laeufe, Meta.schiffswerte(), schiff.laser_wahl, schiff.rakete_wahl])
+	Protokoll.schreib("lauf", "Lauf %d beginnt in Tiefe %d, Werte %s, Waffen %s + %s" % [Meta.laeufe, tiefe, Meta.schiffswerte(), schiff.laser_wahl, schiff.rakete_wahl])
 	_lade_level()
 
 
@@ -633,6 +633,10 @@ func _autotest() -> void:
 		return
 	if "--zeige-gegner" in OS.get_cmdline_user_args():
 		await _gegner_schau()
+		get_tree().quit(0)
+		return
+	if "--starttiefe-test" in OS.get_cmdline_user_args():
+		await _starttiefe_test()
 		get_tree().quit(0)
 		return
 	if "--sammel-test" in OS.get_cmdline_user_args():
@@ -1427,6 +1431,54 @@ func _gegner_schau() -> void:
 		Protokoll.schreib("test", "Mine: Schild+Hülle vorher %.0f, nachher %.0f → %s" % [
 			vorher, schiff.schild + schiff.huelle, "ok" if schiff.schild + schiff.huelle < vorher else "FEHLER"])
 		schiff.unverwundbar = true
+
+
+## Starttiefe: welche Knöpfe es gibt, Wahl per Controller, Lauf beginnt in der gewählten Tiefe.
+func _starttiefe_test() -> void:
+	var ok := true
+	var erg: Array[String] = []
+	for rek in [4, 6, 12]:
+		Meta.rekord = rek
+		erg.append("Rekord %d → wählbar %s" % [rek, Meta.starttiefen()])
+	ok = ok and Meta.starttiefen() == [1, 6, 11]
+	Meta.rekord = 4
+	ok = ok and Meta.starttiefen() == [1]
+	Meta.rekord = 12
+	Meta.start_tiefe = 1
+	Meta.speichern()
+	_zeige_hangar()
+	await _warte(0.6)
+	var knoepfe := []
+	for k in hangar.find_child("Starttiefen", true, false).get_children():
+		if k is Button:
+			knoepfe.append(str(k.name))
+	erg.append("Hangar-Knöpfe %s" % [knoepfe])
+	ok = ok and knoepfe == ["Start_1", "Start_6", "Start_11"]
+	# Per Controller: vom Startknopf hoch in die Reihe, zweimal rechts, A
+	await _knopf_druck(JOY_BUTTON_DPAD_UP)
+	await _knopf_druck(JOY_BUTTON_DPAD_RIGHT)
+	await _knopf_druck(JOY_BUTTON_DPAD_RIGHT)
+	var f := get_viewport().gui_get_focus_owner()
+	await _knopf_druck(JOY_BUTTON_A)
+	erg.append("Controller: Fokus %s, gewählt Tiefe %d" % [f.name if f else "keiner", Meta.start_tiefe])
+	ok = ok and Meta.start_tiefe == 11
+	await _warte(0.3)
+	_foto("hangar_starttiefe")
+	# Gemerkt nach Neuladen, ungültig nach Neues Spiel
+	Meta.laden()
+	var gemerkt := Meta.gueltige_starttiefe()
+	erg.append("nach Neuladen Starttiefe %d" % gemerkt)
+	ok = ok and gemerkt == 11
+	_starte_lauf()
+	await _warte(1.0)
+	erg.append("Lauf beginnt in Tiefe %d, Boss-Tiefe als nächstes: %s" % [tiefe, LevelGen.ist_boss_tiefe(tiefe + 4)])
+	ok = ok and tiefe == 11 and zustand == "flug"
+	Meta.rekord = 0
+	erg.append("Rekord 0 → gültige Starttiefe %d" % Meta.gueltige_starttiefe())
+	ok = ok and Meta.gueltige_starttiefe() == 1
+	for e in erg:
+		Protokoll.schreib("test", "Starttiefe: " + e)
+	Protokoll.schreib("test", "STARTTIEFE-TEST %s" % ("BESTANDEN" if ok else "FEHLGESCHLAGEN"))
 
 
 ## Einsammelreichweite: Erz in 4,3 m (innerhalb der 4,6 m) wird aufgenommen, in 5,0 m nicht.
