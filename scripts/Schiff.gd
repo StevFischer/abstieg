@@ -399,7 +399,7 @@ func _salve(w: Dictionary, start: Vector3, mult: float) -> Array:
 		# höhere Version: etwas dickere Bolzen, damit man es sieht
 		# Zielrechner: Chance auf doppelten Schaden je Geschoss
 		var s: float = w.schaden * mult * (2.0 if krit > 0.0 and randf() < krit else 1.0)
-		var g := Geschoss.neu(start, r, w.tempo, s, true, w.farbe, 0.0, w.groesse * (0.85 + 0.15 * minf(mult, 2.2)))
+		var g := Geschoss.neu(start, r, w.tempo, s, true, w.farbe, 0.0, w.groesse * (0.85 + 0.15 * minf(mult, 2.2)), w.id)
 		if Waffen.ist_laser(w.id):
 			g.durchschlag = (1 if f.has("f_durchschlag") else 0) + durchschlag_extra
 			g.abprall = 1 if f.has("f_abprall") else 0

@@ -30,7 +30,7 @@ var _ausgenommen: Array[RID] = []
 
 
 static func neu(pos: Vector3, richtung: Vector3, tempo: float, p_schaden: float, p_vom_spieler: bool,
-		p_farbe: Color, p_lenkung := 0.0, groesse := 1.0) -> Geschoss:
+		p_farbe: Color, p_lenkung := 0.0, groesse := 1.0, art := "") -> Geschoss:
 	var g := Geschoss.new()
 	g.position = pos
 	g.geschw = richtung.normalized() * tempo
@@ -40,21 +40,7 @@ static func neu(pos: Vector3, richtung: Vector3, tempo: float, p_schaden: float,
 	g.lenkung = p_lenkung
 	if p_lenkung > 0.0 or tempo < 40.0:
 		g.lebenszeit = 6.0      # Raketen und langsame Gegnerschüsse brauchen länger für dieselbe Strecke
-	var mi := MeshInstance3D.new()
-	var kapsel := CapsuleMesh.new()
-	kapsel.radius = 0.09 * groesse
-	kapsel.height = 0.9 * groesse
-	kapsel.radial_segments = 6
-	kapsel.rings = 2
-	var m := StandardMaterial3D.new()
-	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	# Eigene Geschosse fliegen direkt vor der Kamera — weniger grell, sonst verdecken sie die Sicht
-	var hell := 1.5 if p_vom_spieler else 2.2
-	m.albedo_color = Color(p_farbe.r * hell, p_farbe.g * hell, p_farbe.b * hell)
-	kapsel.material = m
-	mi.mesh = kapsel
-	mi.rotation.x = PI / 2.0
-	g.add_child(mi)
+	Optik.geschoss(g, art, p_farbe, groesse, p_vom_spieler)     # Aussehen je Waffe (Optik.gd)
 	var l := OmniLight3D.new()
 	l.light_color = p_farbe
 	l.omni_range = 4.0 * groesse
@@ -161,7 +147,7 @@ func _zersplittern(mitte: Vector3, normale: Vector3) -> void:
 		# enger Fächer weg von der Einschlagstelle; langsam und sehr wendig (Wendekreis ~2 m),
 		# sonst prallen sie in einem 6 m hohen Raum gegen die Wand, bevor sie umdrehen
 		var r := (normale + Vector3(randf() - 0.5, randf() - 0.5, randf() - 0.5) * 1.2).normalized()
-		var g := Geschoss.neu(mitte + normale * 0.6, r, 20.0, schaden * 0.4, true, farbe, 10.0, 0.9)
+		var g := Geschoss.neu(mitte + normale * 0.6, r, 20.0, schaden * 0.4, true, farbe, 10.0, 0.9, "mini")
 		g.lebenszeit = 4.0
 		g.rundum = true
 		get_parent().add_child.call_deferred(g)

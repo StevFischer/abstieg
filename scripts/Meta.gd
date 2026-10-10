@@ -72,19 +72,19 @@ const AUFRUESTUNGEN := [
 	{"id": "raketenschaden", "art": "kampf", "name": "Sprengkopf", "text": "+12 % Raketenschaden", "kosten": 50, "max": 6, "pro": 0.12, "meister": 0.02, "boss": 0},
 	{"id": "kritisch", "art": "kampf", "name": "Zielrechner", "text": "+4 % Chance auf doppelten Schaden", "kosten": 70, "max": 6, "pro": 0.04, "meister": 0.005, "boss": 0},
 	{"id": "schildladen", "art": "ueberleben", "name": "Schildlader", "text": "+20 % Schild-Ladetempo", "kosten": 45, "max": 6, "pro": 0.20, "meister": 0.03, "boss": 0},
-	{"id": "schildpause", "art": "ueberleben", "name": "Schnellstart", "text": "Schild lädt 0,4 s früher", "kosten": 50, "max": 5, "pro": 0.4, "meister": 0.0, "boss": 0},
+	{"id": "schildpause", "art": "ueberleben", "name": "Schnellstart", "text": "Schild lädt 0,4 s früher; als Meister je Stufe −4 %", "kosten": 50, "max": 5, "pro": 0.4, "meister": 0.04, "boss": 0},
 	{"id": "reparatur", "art": "ueberleben", "name": "Reparaturdrohne", "text": "+10 Hülle zu Beginn jeder Tiefe", "kosten": 60, "max": 5, "pro": 10.0, "meister": 2.0, "boss": 0},
 	## Stev 2026-10-10: Notfallschild auf Taste (R / R3) lädt den Schild sofort voll; erste Stufe schaltet frei
 	## (Abklingzeit 10 min), jede weitere senkt sie um 8 % — endlos, Preis steigt gleichmäßig.
-	{"id": "schildladung", "art": "ueberleben", "name": "Notfallschild", "text": "R / rechter Stick: Schild sofort voll; Abklingzeit 10 min, jede weitere Stufe −8 %", "kosten": 250, "max": 1, "pro": 1.0, "meister": 1.0, "endlos": 0.5, "boss": 0},
-	{"id": "notschild", "art": "ueberleben", "name": "Notschild", "text": "einmal je Lauf: tödlicher Treffer → 1 Hülle, Schild voll", "kosten": 300, "max": 2, "pro": 1.0, "meister": 0.0, "boss": 15},
+	{"id": "schildladung", "art": "ueberleben", "name": "Notfallschild", "text": "R / rechter Stick: Schild sofort voll; Abklingzeit 10 min, jede weitere Stufe −4 %", "kosten": 250, "max": 1, "pro": 1.0, "meister": 1.0, "endlos": 0.5, "boss": 0},
+	{"id": "notschild", "art": "ueberleben", "name": "Notschild", "text": "einmal je Lauf: tödlicher Treffer → 1 Hülle, Schild voll; als Meister +1 je Stufe", "kosten": 300, "max": 2, "pro": 1.0, "meister": 1.0, "boss": 15},
 	{"id": "erzausbeute", "art": "wirtschaft", "name": "Raffinerie", "text": "+10 % Erz je Fund", "kosten": 80, "max": 8, "pro": 0.10, "meister": 0.02, "boss": 5},
 	{"id": "beutechance", "art": "wirtschaft", "name": "Bergungskralle", "text": "+4 % Chance, dass Gegner Beute fallen lassen", "kosten": 70, "max": 5, "pro": 0.04, "meister": 0.005, "boss": 5},
-	{"id": "magnet", "art": "wirtschaft", "name": "Erzmagnet", "text": "Beute fliegt zum Schiff: 6 m, je Stufe +3 m", "kosten": 90, "max": 3, "pro": 1.0, "meister": 0.0, "boss": 5},
+	{"id": "magnet", "art": "wirtschaft", "name": "Erzmagnet", "text": "Beute fliegt zum Schiff: 6 m, je Stufe +3 m; als Meister je Stufe +4 %", "kosten": 90, "max": 3, "pro": 1.0, "meister": 0.04, "boss": 5},
 	{"id": "abschluss", "art": "wirtschaft", "name": "Vertragsbonus", "text": "+15 % Abschlussbelohnung", "kosten": 80, "max": 5, "pro": 0.15, "meister": 0.03, "boss": 5},
-	{"id": "nachbrenner", "art": "werkzeuge", "name": "Nachbrenner", "text": "Sprint ×2 für 1,5 s (Umschalt / X); Abklingzeit 9 s, je Stufe −1,5 s", "kosten": 120, "max": 4, "pro": 1.0, "meister": 0.0, "boss": 10},
+	{"id": "nachbrenner", "art": "werkzeuge", "name": "Nachbrenner", "text": "Sprint ×2 für 1,5 s (Umschalt / X); Abklingzeit 9 s, je Stufe −1,5 s; als Meister je Stufe −4 %", "kosten": 120, "max": 4, "pro": 1.0, "meister": 0.04, "boss": 10},
 	{"id": "fluchtzeit", "art": "werkzeuge", "name": "Kühlstäbe", "text": "+10 % Fluchtzeit nach dem Reaktor", "kosten": 60, "max": 5, "pro": 0.10, "meister": 0.02, "boss": 10},
-	{"id": "radar", "art": "werkzeuge", "name": "Gegnerradar", "text": "zeigt Gegner durch Wände: 25 m, je Stufe +10 m", "kosten": 150, "max": 3, "pro": 1.0, "meister": 0.0, "boss": 10},
+	{"id": "radar", "art": "werkzeuge", "name": "Gegnerradar", "text": "zeigt Gegner durch Wände: 25 m, je Stufe +10 m; als Meister je Stufe +4 %", "kosten": 150, "max": 3, "pro": 1.0, "meister": 0.04, "boss": 10},
 ]
 
 var bank := 0
@@ -419,11 +419,35 @@ func wert_bei(id: String, st: int) -> float:
 	return mini(st, int(a.max)) * float(a.pro) + maxi(st - int(a.max), 0) * float(a.meister)
 
 
-## Notfallschild: 0 = nicht gekauft, Stufe 1 = 600 s, jede weitere ×0,92.
+## Notfallschild: 0 = nicht gekauft, Stufe 1 = 600 s, jede weitere ×0,96 (Stev 2026-10-10: „4 % reichen“).
 const NOTFALL_START := 600.0
-const NOTFALL_FAKTOR := 0.92
+const NOTFALL_FAKTOR := 0.96
 func notfall_abklingzeit(st: int) -> float:
 	return 0.0 if st <= 0 else NOTFALL_START * pow(NOTFALL_FAKTOR, st - 1)
+
+
+## Alle Aufrüstungen endlos (Stev 2026-10-10: „baue den Rest auch so um, dass er endlos ist und Prozent von
+## etwas reduziert“): Wartezeiten sinken als Meister je Stufe um 4 % vom aktuellen Wert, Reichweiten steigen um 4 %.
+const MEISTER_PROZENT := 0.04
+func _prozent(id: String, st: int, abnehmend: bool) -> float:
+	var m := maxi(st - int(_def(id).max), 0)
+	return pow(1.0 - MEISTER_PROZENT if abnehmend else 1.0 + MEISTER_PROZENT, m)
+
+
+func schildpause_bei(st: int) -> float:
+	return (5.0 - 0.4 * mini(st, 5)) * _prozent("schildpause", st, true)
+
+
+func nachbrenner_bei(st: int) -> float:
+	return 0.0 if st <= 0 else (9.0 - 1.5 * (mini(st, 4) - 1)) * _prozent("nachbrenner", st, true)
+
+
+func magnet_bei(st: int) -> float:
+	return 0.0 if st <= 0 else (6.0 + 3.0 * (mini(st, 3) - 1)) * _prozent("magnet", st, false)
+
+
+func radar_bei(st: int) -> float:
+	return 0.0 if st <= 0 else (25.0 + 10.0 * (mini(st, 3) - 1)) * _prozent("radar", st, false)
 
 
 ## Lesbare Gesamtwirkung bei Stufe st, z. B. „+30 % Laserschaden“ oder „Radar 35 m“.
@@ -434,12 +458,12 @@ func wirkung_text(id: String, st: int) -> String:
 		"panzerung": return "Hülle %d" % int(100 + w)
 		"triebwerk": return "Tempo %.1f m/s" % (14.0 * (1.0 + w))
 		"raketen": return "Raketen %d" % (4 + int(w))
-		"schildpause": return "Schild lädt nach %.1f s" % (5.0 - w)
+		"schildpause": return "Schild lädt nach %.2f s" % schildpause_bei(st)
 		"reparatur": return "+%d Hülle je Tiefe" % int(w)
 		"notschild": return "%d Notschild je Lauf" % int(w)
-		"magnet": return "kein Magnet" if st == 0 else "Magnet %d m" % (6 + 3 * (st - 1))
-		"nachbrenner": return "kein Nachbrenner" if st == 0 else "Abklingzeit %.1f s" % (9.0 - 1.5 * (st - 1))
-		"radar": return "kein Radar" if st == 0 else "Radar %d m" % (25 + 10 * (st - 1))
+		"magnet": return "kein Magnet" if st == 0 else "Magnet %.1f m" % magnet_bei(st)
+		"nachbrenner": return "kein Nachbrenner" if st == 0 else "Abklingzeit %.2f s" % nachbrenner_bei(st)
+		"radar": return "kein Radar" if st == 0 else "Radar %.0f m" % radar_bei(st)
 		"schildladung":
 			if st == 0:
 				return "kein Notfallschild"
@@ -524,16 +548,16 @@ func schiffswerte() -> Dictionary:
 		"raketen_mult": 1.0 + wert("raketenschaden"),
 		"krit": minf(wert("kritisch"), 0.6),
 		"schild_laden": 1.0 + wert("schildladen"),
-		"schild_pause": 5.0 - wert("schildpause"),
+		"schild_pause": schildpause_bei(stufe("schildpause")),
 		"reparatur": wert("reparatur"),
 		"notschild": int(wert("notschild")),
 		"erz_mult": 1.0 + wert("erzausbeute"),
 		"beute_bonus": minf(wert("beutechance"), 0.5),
-		"magnet": 0.0 if stufe("magnet") == 0 else 6.0 + 3.0 * (stufe("magnet") - 1),
+		"magnet": magnet_bei(stufe("magnet")),
 		"abschluss_mult": 1.0 + wert("abschluss"),
-		"nachbrenner_cd": 0.0 if stufe("nachbrenner") == 0 else 9.0 - 1.5 * (stufe("nachbrenner") - 1),
+		"nachbrenner_cd": nachbrenner_bei(stufe("nachbrenner")),
 		"flucht_mult": 1.0 + wert("fluchtzeit"),
-		"radar": 0.0 if stufe("radar") == 0 else 25.0 + 10.0 * (stufe("radar") - 1),
+		"radar": radar_bei(stufe("radar")),
 		"notfall_cd": notfall_abklingzeit(stufe("schildladung")),
 		"forschung": forschung.duplicate(),
 	}

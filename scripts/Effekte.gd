@@ -67,42 +67,15 @@ static func schadenszahl(eltern: Node, pos: Vector3, text: String, wert := 0.0, 
 	return l
 
 
-static func explosion(eltern: Node, pos: Vector3, farbe: Color, groesse: float) -> void:
+static func explosion(eltern: Node, pos: Vector3, farbe: Color, groesse: float, mit_ton := true) -> void:
 	if eltern == null or not eltern.is_inside_tree():
 		return
-	if groesse <= 1.5:
-		ton("einschlag", pos, -12.0)
-	elif groesse <= 5.0:
-		ton("explosion", pos, 0.0)
-	else:
-		ton("explosion_gross", pos, 0.0)
-	var k := MeshInstance3D.new()
-	var kugel := SphereMesh.new()
-	kugel.radius = 0.5
-	kugel.height = 1.0
-	kugel.radial_segments = 10
-	kugel.rings = 6
-	var m := StandardMaterial3D.new()
-	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	# Gedämpft (Stev: „Effekte zu heftig, sieht man nicht gut“): weniger grell, halb durchsichtig,
-	# kleine Einschläge fast ohne Lichtblitz — bei Dauerfeuer summieren sich die Blitze sonst.
-	m.albedo_color = Color(farbe.r * 1.3, farbe.g * 1.3, farbe.b * 1.3, 0.7)
-	kugel.material = m
-	k.mesh = kugel
-	eltern.add_child(k)
-	k.global_position = pos
-	k.scale = Vector3.ONE * 0.2
-	var licht := OmniLight3D.new()
-	licht.light_color = farbe
-	licht.omni_range = groesse * (2.5 if groesse <= 1.5 else 4.0)
-	licht.light_energy = 0.6 if groesse <= 1.5 else 2.2
-	eltern.add_child(licht)
-	licht.global_position = pos
-	var tw := k.create_tween().set_parallel()
-	tw.tween_property(k, "scale", Vector3.ONE * groesse, 0.35).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_EXPO)
-	tw.tween_property(m, "albedo_color:a", 0.0, 0.45)
-	tw.tween_property(licht, "light_energy", 0.0, 0.5)
-	tw.chain().tween_callback(func():
-		k.queue_free()
-		licht.queue_free())
+	if mit_ton:
+		if groesse <= 1.5:
+			ton("einschlag", pos, -12.0)
+		elif groesse <= 5.0:
+			ton("explosion", pos, 0.0)
+		else:
+			ton("explosion_gross", pos, 0.0)
+	# Aussehen (Blitz, Feuerball, Funken, Druckwelle, Licht) steht in Optik.gd — Stev 2026-10-10
+	Optik.explosion(eltern, pos, farbe, groesse)

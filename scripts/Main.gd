@@ -640,21 +640,17 @@ func _aufwaermen() -> void:
 			b.modul = Module.erzeugen(RandomNumberGenerator.new(), tiefe)
 		setzen.call(b, -vor * 1.5 + rechts * (i - 2.5) * 1.2 - oben * 2.5)
 	setzen.call(Mine.neu(Vector3.ZERO, 0.0), -vor * 1.5 + oben * 2.5)
-	setzen.call(Geschoss.neu(Vector3.ZERO, vor, 0.0, 0.0, true, Color(1, 0.3, 0.2)), -vor * 2.0 + rechts * 1.0)
-	setzen.call(Geschoss.neu(Vector3.ZERO, vor, 0.0, 0.0, false, Color(1, 0.6, 0.1), 0.0, 2.4), -vor * 2.0 - rechts * 1.0)
+	# jede Geschossoptik (Optik.gd): alle Laser, alle Raketenmodelle, Splitter-Zielsucher, Gegnerschuss
+	var arten_g: Array = Waffen.LASER.map(func(w): return w.id) + Waffen.RAKETEN.map(func(w): return w.id) + ["mini", ""]
+	for i in arten_g.size():
+		setzen.call(Geschoss.neu(Vector3.ZERO, vor, 0.1, 0.0, arten_g[i] != "", Color(1, 0.5, 0.2), 0.0, 1.0, arten_g[i]),
+			-vor * 2.0 + rechts * (i - arten_g.size() / 2.0) * 0.5 + oben * 1.5)
+	Optik.explosion(level, mitte - vor * 1.0, Color(1, 0.6, 0.2), 6.0)        # Explosion ohne Ton (räumt sich selbst weg)
+	Optik.explosion(level, mitte - vor * 1.0 + rechts, Color(1, 0.3, 0.2), 1.0)
 	var zahl := Effekte.schadenszahl(level, mitte, "0")
 	if zahl:
 		teile.append(zahl)
-	# Explosionskugel wie Effekte.explosion (ohne Ton) und ein großes Punktlicht, das Wände und Gegner trifft
-	var k := MeshInstance3D.new()
-	var kugel := SphereMesh.new()
-	var m := StandardMaterial3D.new()
-	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	m.albedo_color = Color(1, 0.6, 0.2, 0.7)
-	kugel.material = m
-	k.mesh = kugel
-	setzen.call(k, -vor * 1.0)
+	# dazu große Punktlichter, die Wände und Gegner treffen
 	# Jedes Material, das im Level schon steckt (Wände, Gitter, Deko, Reaktor), einmal auf einem kleinen Quadrat
 	var mats := {}
 	for mi: MeshInstance3D in level.find_children("*", "MeshInstance3D", true, false):
@@ -671,7 +667,7 @@ func _aufwaermen() -> void:
 					mats[mm] = true
 	var n_mat := 0
 	for mat in mats:
-		if n_mat >= 240:
+		if n_mat >= 400:
 			break
 		var q := MeshInstance3D.new()
 		var qm := QuadMesh.new()
@@ -961,6 +957,10 @@ func _autotest() -> void:
 		return
 	if "--zeige-gegner" in OS.get_cmdline_user_args():
 		await _gegner_schau()
+		get_tree().quit(0)
+		return
+	if "--zeige-geschosse" in OS.get_cmdline_user_args():
+		await _geschoss_schau()
 		get_tree().quit(0)
 		return
 	if "--tasten-test" in OS.get_cmdline_user_args():
@@ -1706,6 +1706,66 @@ func _sicht_test() -> void:
 	Protokoll.schreib("test", "Sicht: %s → %s" % ["; ".join(erg), "BESTANDEN" if ok else "FEHLGESCHLAGEN"])
 
 
+## Geschoss- und Explosionsschau (2026-10-10): Seitenansicht aller Geschosse, eigenes Feuer aus dem Cockpit,
+## Explosionen in drei Größen zu drei Zeitpunkten. Bilder in pruefung/geschoss_*.png.
+func _geschoss_schau() -> void:
+	for g in get_tree().get_nodes_in_group("gegner"):
+		g.free()
+	await _warte(1.0)
+	hud.visible = false
+	var vor := -schiff.global_basis.z
+	var rechts := schiff.global_basis.x
+	var oben := schiff.global_basis.y
+	var p0 := schiff.global_position
+	var reihen := [
+		["laser", [["zwilling", true, Color(1.0, 0.3, 0.2), 1.0], ["streu", true, Color(0.35, 1.0, 0.35), 1.0],
+			["vulkan", true, Color(1.0, 0.9, 0.3), 0.7], ["plasma", true, Color(0.3, 0.8, 1.0), 1.7],
+			["", false, Color(1.0, 0.25, 0.1), 1.0], ["", false, Color(0.5, 1.0, 0.9), 2.4]]],
+		["raketen", [["zielsuch", true, Color(1.0, 0.75, 0.3), 1.6], ["streu_r", true, Color(1.0, 0.55, 0.2), 1.3],
+			["smart", true, Color(0.6, 1.0, 0.4), 1.8], ["mega", true, Color(1.0, 0.3, 0.9), 2.0], ["mini", true, Color(0.6, 1.0, 0.4), 0.9]]],
+	]
+	for r in reihen:
+		var teile := []
+		var n: int = r[1].size()
+		for i in n:
+			var d: Array = r[1][i]
+			var g := Geschoss.neu(p0 + vor * 5.0 + rechts * 0.8 - oben * (i - (n - 1) / 2.0) * 0.75, rechts, 0.1, 0.0, d[1], d[2], 0.0, d[3], d[0])
+			g.process_mode = Node.PROCESS_MODE_DISABLED
+			level.add_child(g)
+			g.global_basis = Basis.looking_at(rechts.rotated(oben, -0.35), oben)     # schräg von der Seite
+			teile.append(g)
+		await _warte(0.4)
+		_foto("geschoss_%s" % r[0])
+		for t in teile:
+			t.free()
+	# Eigenes Feuer aus dem Cockpit
+	hud.visible = true
+	schiff.laser_wahl = "zwilling"
+	for i in 3:
+		schiff.laser_schuss()
+		await _warte(0.07)
+	_foto("geschoss_cockpit_laser")
+	await _warte(0.6)
+	schiff.rakete_wahl = "zielsuch"
+	schiff.raketen = schiff.raketen_max
+	schiff.raketen_schuss()
+	await _warte(0.18)
+	_foto("geschoss_cockpit_rakete")
+	await _warte(1.5)
+	hud.visible = false
+	# Explosionen: Einschlag, Rakete, Mega — je bei 0,06 / 0,18 / 0,35 s
+	# je Zeitpunkt eine eigene Explosion: das Foto selbst kostet Zeit und würde die nächste Aufnahme verschieben
+	for e in [[1.0, Color(1.0, 0.3, 0.2), 6.0], [3.5, Color(1.0, 0.6, 0.2), 10.0], [9.0, Color(1.0, 0.3, 0.9), 16.0]]:
+		for zeit in [0.06, 0.18, 0.35]:
+			Effekte.explosion(level, p0 + vor * e[2], e[1], e[0], false)
+			var t0 := Time.get_ticks_msec()
+			while Time.get_ticks_msec() - t0 < zeit * 1000.0:
+				await get_tree().process_frame
+			_foto("geschoss_explosion_%s_%03d" % [str(e[0]).replace(".", ""), int(zeit * 1000)])
+			await _warte(0.9)
+	Protokoll.schreib("test", "Geschoss-Schau fertig")
+
+
 ## Tastenbelegung: Anzeige, Umbelegen über die Optionen (echter Tastendruck), Tausch, Speichern/Laden, Standard.
 func _tasten_test() -> void:
 	var erg: Array[String] = []
@@ -2253,10 +2313,20 @@ func _aufwertungs_test() -> void:
 	Meta.stufen = {"schildladung": 0}
 	var nf_k0 := Meta.kosten("schildladung")
 	Meta.stufen = {"laserschaden": 10}
-	ok = pruef.call("Notfallschild Stufen", nf[0] == 0.0 and is_equal_approx(nf[1], 600.0) and is_equal_approx(nf[2], 552.0) and absf(nf[3] - 600.0 * pow(0.92, 10)) < 0.01 and nf_k0 == 250,
+	ok = pruef.call("Notfallschild Stufen", nf[0] == 0.0 and is_equal_approx(nf[1], 600.0) and is_equal_approx(nf[2], 576.0) and absf(nf[3] - 600.0 * pow(0.96, 10)) < 0.01 and nf_k0 == 250,
 		"Abklingzeit Stufe 0/1/2/11: %s s, erste Stufe kostet %d" % [nf.map(func(x): return "%.0f" % x), nf_k0]) and ok
-	ok = pruef.call("Ohne Meister", Meta.stufen.size() == 1 and (func(): Meta.stufen["magnet"] = 3; return Meta.ausgereizt("magnet")).call(),
-		"Magnet Stufe 3/3 ausgereizt") and ok
+	# Alle Aufrüstungen endlos: keine ist bei Stufe 200 ausgereizt; Wartezeiten −4 %, Reichweiten +4 % je Meisterstufe
+	var nie_aus := Meta.AUFRUESTUNGEN.filter(func(a): Meta.stufen = {a.id: 200}; return Meta.ausgereizt(a.id)).map(func(a): return a.id)
+	Meta.stufen = {"schildpause": 15, "nachbrenner": 14, "magnet": 13, "radar": 13, "notschild": 5}
+	var sw := Meta.schiffswerte()
+	var soll_e := [3.0 * pow(0.96, 10), 4.5 * pow(0.96, 10), 12.0 * pow(1.04, 10), 45.0 * pow(1.04, 10), 5]
+	var ist_e := [sw.schild_pause, sw.nachbrenner_cd, sw.magnet, sw.radar, sw.notschild]
+	var gleich := true
+	for i in 5:
+		gleich = gleich and absf(float(ist_e[i]) - float(soll_e[i])) < 0.01
+	ok = pruef.call("Alles endlos", nie_aus.is_empty() and gleich, "ausgereizt bei Stufe 200: %s; Meister 10: Schildpause %.2f s, Nachbrenner %.2f s, Magnet %.1f m, Radar %.0f m, Notschild %d; Text „%s“" % [
+		nie_aus, ist_e[0], ist_e[1], ist_e[2], ist_e[3], ist_e[4], Meta.wirkung_text("nachbrenner", 14)]) and ok
+	Meta.stufen = {"laserschaden": 10}
 	# Alles auf eine Teststufe
 	Meta.stufen = {"laserschaden": 3, "feuerrate": 5, "raketenschaden": 2, "kritisch": 6, "schildladen": 5, "schildpause": 5,
 		"reparatur": 2, "notschild": 1, "erzausbeute": 5, "beutechance": 5, "magnet": 2, "abschluss": 4,
@@ -2285,7 +2355,7 @@ func _aufwertungs_test() -> void:
 	Input.action_release("notfallschild")
 	await _warte(0.3)
 	_foto("notfallschild_hud")
-	ok = pruef.call("Notfallschild im Flug", nf_voll and absf(nf_rest - 600.0 * 0.92 * 0.92) < 0.1 and schiff.schild < 10.0 and hud.notfall.begins_with("Notfallschild 8:"),
+	ok = pruef.call("Notfallschild im Flug", nf_voll and absf(nf_rest - 600.0 * 0.96 * 0.96) < 0.1 and schiff.schild < 10.0 and hud.notfall.begins_with("Notfallschild 9:"),
 		"Taste R: Schild 5 → voll %s, Abklingzeit %.0f s (Stufe 3), zweiter Druck Schild %.0f, HUD „%s“" % [nf_voll, nf_rest, schiff.schild, hud.notfall]) and ok
 	var neue := func() -> Array:
 		var aus := []
