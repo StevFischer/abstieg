@@ -8,7 +8,7 @@ signal optionen
 
 const ORANGE := Color(1.0, 0.6, 0.2)
 const ART_FARBE := {"kampf": Color(1.0, 0.35, 0.3), "ueberleben": Color(0.4, 0.75, 1.0),
-	"wirtschaft": Color(1.0, 0.82, 0.3), "werkzeuge": Color(0.35, 0.95, 0.85), "forschung": Color(0.75, 0.55, 1.0), "module": Color(1.0, 0.6, 0.15)}
+	"wirtschaft": Color(1.0, 0.82, 0.3), "werkzeuge": Color(0.35, 0.95, 0.85), "forschung": Color(0.75, 0.55, 1.0), "module": Color(1.0, 0.6, 0.15), "pakt": Color(1.0, 0.3, 0.3)}
 const ZWEIG_FARBE := {"Waffen": Color(1.0, 0.35, 0.3), "Schiff": Color(0.4, 0.75, 1.0),
 	"Bergbau": Color(1.0, 0.82, 0.3), "Taktik": Color(0.35, 0.95, 0.85)}
 
@@ -83,13 +83,13 @@ func aufbauen() -> void:
 	for a in Meta.AUFRUESTUNGEN:
 		if a.art == _reiter:
 			raster.add_child(_aufruestkarte(a))
-	if _reiter == "forschung" or _reiter == "module":
+	if _reiter in ["forschung", "module", "pakt"]:
 		links.remove_child(raster)
 		raster.queue_free()
-		if _reiter == "forschung":
-			_forschungsbaum(links)
-		else:
-			_module_ansicht(links)
+		match _reiter:
+			"forschung": _forschungsbaum(links)
+			"module": _module_ansicht(links)
+			"pakt": _pakt_ansicht(links)
 	_info = _label("Steuerkreuz/Maus auf eine Karte: Name und Werte erscheinen hier.", 17, Color(0.7, 0.68, 0.6), true)
 	_info.custom_minimum_size = Vector2(0, 52)
 	_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -204,6 +204,9 @@ func _reiter_zeile(links: VBoxContainer) -> void:
 		if id == "module":
 			frei = true
 			neu = Meta.module.size()
+		if id == "pakt":
+			frei = Meta.pakt_frei()
+			neu = Meta.pakt_punkte()
 		if id == "forschung":
 			frei = true
 			for k in Meta.FORSCHUNG:
@@ -217,7 +220,7 @@ func _reiter_zeile(links: VBoxContainer) -> void:
 		b.button_pressed = id == _reiter
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.custom_minimum_size = Vector2(0, 36)
-		b.add_theme_font_size_override("font_size", 14)
+		b.add_theme_font_size_override("font_size", 13)
 		var farbe: Color = ART_FARBE.get(id, ORANGE)
 		var gedrueckt := StyleBoxFlat.new()
 		gedrueckt.bg_color = Color(farbe.r * 0.22, farbe.g * 0.22, farbe.b * 0.22)
@@ -391,6 +394,44 @@ func _module_ansicht(links: VBoxContainer) -> void:
 		b.gui_input.connect(func(e: InputEvent):
 			if e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_RIGHT:
 				modul_zerlegen_knopf(idx))
+		gitter.add_child(b)
+
+
+## Pakt: acht Erschwernisse als Schalter (A/Klick: eine Stufe weiter, nach der höchsten wieder aus).
+func _pakt_ansicht(links: VBoxContainer) -> void:
+	var p := Meta.pakt_punkte()
+	var meilen: Array[String] = []
+	for m in Meta.PAKT_MEILENSTEINE:
+		meilen.append("Pakt %d: %s %s" % [m[0], Module.SELTEN[m[1]].name.to_lower(), "erhalten" if m[0] in Meta.pakt_meilen else "offen"])
+	var rek: Dictionary = Meta.pakt_rekord
+	links.add_child(_label("Pakt %d aktiv  ·  +%d %% Erz, Module öfter  ·  Rekord: Pakt %d bis Tiefe %d" % [
+		p, p * 10, rek.punkte, rek.tiefe], 15, ART_FARBE.pakt, false))
+	links.add_child(_label("Meilensteine (Boss besiegen): " + "  ·  ".join(meilen), 13, Color(0.75, 0.7, 0.62), false))
+	var gitter := GridContainer.new()
+	gitter.name = "PaktListe"
+	gitter.columns = 2
+	gitter.add_theme_constant_override("h_separation", 8)
+	gitter.add_theme_constant_override("v_separation", 6)
+	links.add_child(gitter)
+	var frei := Meta.pakt_frei()
+	for e in Meta.PAKT:
+		var id: String = e.id
+		var st := Meta.pakt_stufe(id)
+		var mx := int(e.max)
+		var b := Button.new()
+		b.name = "Pakt_" + id
+		b.custom_minimum_size = Vector2(355, 50)
+		b.add_theme_font_size_override("font_size", 13)
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.text = "%s   %s   (%d Punkt%s je Stufe)\n%s" % [e.name, "●".repeat(st) + "○".repeat(mx - st), e.punkte,
+			"" if int(e.punkte) == 1 else "e", e.text]
+		var farbe := ART_FARBE.pakt if st > 0 else Color(0.5, 0.45, 0.42)
+		b.add_theme_stylebox_override("normal", _modul_stil(farbe, st > 0))
+		b.add_theme_stylebox_override("hover", _modul_stil(Color.WHITE, st > 0))
+		b.add_theme_stylebox_override("focus", _modul_stil(Color.WHITE, st > 0))
+		b.add_theme_color_override("font_color", Color(1.0, 0.85, 0.8) if st > 0 else Color(0.75, 0.72, 0.68))
+		var tip := "%s: Stufe %d/%d — A/Klick schaltet eine Stufe weiter\n%s" % [e.name, st, mx, e.text]
+		_knopf(b, frei, tip, func(): return Meta.pakt_umschalten(id), "Der Pakt wird mit dem ersten besiegten Boss (Tiefe 5) freigeschaltet")
 		gitter.add_child(b)
 
 

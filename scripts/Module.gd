@@ -61,9 +61,10 @@ static func seltenheit_wuerfeln(rng: RandomNumberGenerator, boss: bool) -> int:
 	return maxi(beste, 2) if boss else beste
 
 
-static func erzeugen(rng: RandomNumberGenerator, tiefe: int, boss := false, p_platz := "") -> Dictionary:
+## p_selten >= 0 gibt die Seltenheit vor (Pakt-Meilenstein).
+static func erzeugen(rng: RandomNumberGenerator, tiefe: int, boss := false, p_platz := "", p_selten := -1) -> Dictionary:
 	var platz: String = p_platz if p_platz != "" else PLATZ_REIHE[rng.randi_range(0, 3)]
-	var selten := seltenheit_wuerfeln(rng, boss)
+	var selten := p_selten if p_selten >= 0 else seltenheit_wuerfeln(rng, boss)
 	var moegliche: Array = []
 	for id in EIG:
 		if platz in EIG[id].plaetze:

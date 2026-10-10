@@ -7,7 +7,7 @@ var _pfad := "user://abstieg_meta.cfg"
 ## Stev 2026-10-10: „viel mehr Aufwertungen für die Langzeitmotivation“ — Kampf, Überleben, Wirtschaft,
 ## Werkzeuge; endlose Meisterschaft; an Bosse gekoppelt; Reiter nach Art.
 const REITER := [["schiff", "Schiff"], ["kampf", "Kampf"], ["ueberleben", "Überleben"],
-	["wirtschaft", "Wirtschaft"], ["werkzeuge", "Werkzeuge"], ["forschung", "Forschung"], ["module", "Module"]]
+	["wirtschaft", "Wirtschaft"], ["werkzeuge", "Werkzeuge"], ["forschung", "Forschung"], ["module", "Module"], ["pakt", "Pakt"]]
 ## Forschungsbaum (Stev 2026-10-10: „ohne Scans einfach nur einen Forschungsbaum im Kaufmenü …
 ## Punkte dafür gibt es pro Stufe, die man maximal erreicht hat“; Inhalt: nur Freischaltungen und Boni).
 ## 1 Punkt je erreichter Rekordtiefe. "zeile"/"spalte": Platz im Baum, "vor": nötige Knoten.
@@ -29,6 +29,20 @@ const FORSCHUNG := [
 	{"id": "t_ueberladung", "zweig": "Taktik", "zeile": 3, "spalte": 2, "name": "Überladung", "text": "Nach jedem Abschuss 3 s lang +25 % Feuerrate", "kosten": 2, "vor": ["t_sparer"]},
 	{"id": "t_schock", "zweig": "Taktik", "zeile": 3, "spalte": 3, "name": "Schockwelle", "text": "Trifft etwas die Hülle, stößt eine Welle Gegner in 8 m weg (25 Schaden), alle 6 s", "kosten": 3, "vor": ["t_ueberladung"]},
 ]
+## Schwierigkeitspakt (wie Hades): freiwillige Erschwernisse gegen Belohnung. Je Stufe "punkte" Paktpunkte.
+## Belohnung: +10 % Erz je Punkt beim Abschluss einer Tiefe, Module fallen öfter; Meilensteine: Boss mit
+## Pakt ≥ 5 besiegt → einmalig episches Modul, ≥ 10 → legendäres. Freigeschaltet nach Boss 5.
+const PAKT := [
+	{"id": "zaeh", "name": "Zähe Gegner", "text": "+25 % Leben der Gegner je Stufe", "max": 3, "punkte": 1},
+	{"id": "scharf", "name": "Scharfschützen", "text": "Gegnerschüsse +20 % schneller je Stufe", "max": 2, "punkte": 1},
+	{"id": "glas", "name": "Glaskanone", "text": "Du nimmst doppelten Schaden", "max": 1, "punkte": 3},
+	{"id": "ohneschild", "name": "Kein Schildladen", "text": "Der Schild lädt sich nicht von selbst auf", "max": 1, "punkte": 2},
+	{"id": "dunkel", "name": "Dunkelheit", "text": "Lampen und Umgebungslicht nur halb so hell", "max": 1, "punkte": 1},
+	{"id": "lunte", "name": "Kurze Lunte", "text": "−20 % Fluchtzeit je Stufe", "max": 2, "punkte": 1},
+	{"id": "horde", "name": "Horde", "text": "+30 % Gegner je Stufe", "max": 2, "punkte": 1},
+	{"id": "wut", "name": "Wütende Bosse", "text": "Bosse +50 % Leben, Phase 2 schon ab 70 %", "max": 1, "punkte": 2},
+]
+const PAKT_MEILENSTEINE := [[5, 3], [10, 4]]     ## [Paktpunkte, Seltenheit des Belohnungsmoduls]
 const AUFRUESTUNGEN := [
 	{"id": "schild", "art": "schiff", "name": "Schildgenerator", "text": "+25 Schild", "kosten": 40, "max": 8, "pro": 25.0, "meister": 5.0, "boss": 0},
 	{"id": "panzerung", "art": "schiff", "name": "Panzerung", "text": "+25 Hülle", "kosten": 40, "max": 8, "pro": 25.0, "meister": 5.0, "boss": 0},
@@ -61,6 +75,9 @@ var forschung: Array = []  ## erforschte Knoten-IDs
 var module: Array = []     ## Inventar: Modul-Dictionaries (siehe Module.gd)
 var eingebaut := {}        ## Steckplatz -> Modul
 var bauteile := 0          ## aus zerlegten Modulen; braucht später die Station
+var pakt := {}             ## Erschwernis-ID -> Stufe
+var pakt_rekord := {"punkte": 0, "tiefe": 0}
+var pakt_meilen: Array = []   ## schon erhaltene Meilensteine (Paktpunkte)
 var waffen_stufen := {}    ## Version je Waffe (1 = Mk I); fehlt ein Eintrag, ist es Mk I
 ## Spielzeit wie bei Steam: Zeit, in der das Spiel offen ist (auch Hangar/Pause). Übersteht „Neues Spiel“.
 var spielzeit := 0.0       ## Sekunden insgesamt
@@ -208,6 +225,52 @@ func modul_zerlegen(index: int) -> int:
 	module.remove_at(index)
 	speichern()
 	return n
+
+
+func pakt_def(id: String) -> Dictionary:
+	for p in PAKT:
+		if p.id == id:
+			return p
+	return {}
+
+
+func pakt_stufe(id: String) -> int:
+	return int(pakt.get(id, 0))
+
+
+func pakt_punkte() -> int:
+	var n := 0
+	for p in PAKT:
+		n += pakt_stufe(p.id) * int(p.punkte)
+	return n
+
+
+func pakt_frei() -> bool:
+	return rekord > 5
+
+
+## Erschwernis eine Stufe weiter; nach der höchsten wieder aus.
+func pakt_umschalten(id: String) -> bool:
+	if not pakt_frei():
+		return false
+	var st := (pakt_stufe(id) + 1) % (int(pakt_def(id).max) + 1)
+	if st == 0:
+		pakt.erase(id)
+	else:
+		pakt[id] = st
+	speichern()
+	Protokoll.schreib("meta", "Pakt %s auf Stufe %d, zusammen %d Punkte" % [id, st, pakt_punkte()])
+	return true
+
+
+## Beim Erreichen einer Tiefe: Paktrekord nachziehen (mehr Punkte, oder gleich viele und tiefer).
+func pakt_tiefe_erreicht(t: int) -> void:
+	var p := pakt_punkte()
+	if p <= 0:
+		return
+	if p > int(pakt_rekord.punkte) or (p == int(pakt_rekord.punkte) and t > int(pakt_rekord.tiefe)):
+		pakt_rekord = {"punkte": p, "tiefe": t}
+		speichern()
 
 
 func forschung_def(id: String) -> Dictionary:
@@ -419,6 +482,9 @@ func zuruecksetzen() -> void:
 	module = []
 	eingebaut = {}
 	bauteile = 0
+	pakt = {}
+	pakt_rekord = {"punkte": 0, "tiefe": 0}
+	pakt_meilen = []
 	speichern()
 
 
@@ -437,6 +503,9 @@ func laden() -> void:
 	module = c.get_value("meta", "module", [])
 	eingebaut = c.get_value("meta", "eingebaut", {})
 	bauteile = c.get_value("meta", "bauteile", 0)
+	pakt = c.get_value("meta", "pakt", {})
+	pakt_rekord = c.get_value("meta", "pakt_rekord", {"punkte": 0, "tiefe": 0})
+	pakt_meilen = c.get_value("meta", "pakt_meilen", [])
 	spielzeit = c.get_value("meta", "spielzeit", 0.0)
 	spielzeit_tage = c.get_value("meta", "spielzeit_tage", {})
 	zuletzt = c.get_value("meta", "zuletzt", 0)
@@ -479,6 +548,9 @@ func speichern() -> void:
 	c.set_value("meta", "module", module)
 	c.set_value("meta", "eingebaut", eingebaut)
 	c.set_value("meta", "bauteile", bauteile)
+	c.set_value("meta", "pakt", pakt)
+	c.set_value("meta", "pakt_rekord", pakt_rekord)
+	c.set_value("meta", "pakt_meilen", pakt_meilen)
 	c.set_value("meta", "spielzeit", spielzeit)
 	c.set_value("meta", "spielzeit_tage", spielzeit_tage)
 	c.set_value("meta", "zuletzt", int(Time.get_unix_time_from_system()) if spielzeit > 0.0 else zuletzt)

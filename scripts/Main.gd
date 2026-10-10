@@ -163,6 +163,13 @@ func _lade_level() -> void:
 	_umgebung_setzen()
 	Meta.rekord = maxi(Meta.rekord, tiefe)
 	Meta.speichern()
+	Meta.pakt_tiefe_erreicht(tiefe)
+	if Meta.pakt_stufe("dunkel") > 0:      # Pakt „Dunkelheit“
+		for l in get_tree().get_nodes_in_group("minenlicht"):
+			l.light_energy *= 0.5
+	if schiff:
+		schiff.schaden_faktor = 2.0 if Meta.pakt_stufe("glas") > 0 else 1.0
+		schiff.schild_laedt = Meta.pakt_stufe("ohneschild") == 0
 	if schiff:
 		if Meta.erforscht("b_magazin"):
 			schiff.raketen = schiff.raketen_max
@@ -208,6 +215,12 @@ func _lade_level() -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
+## Pakt „Horde“: +30 % Gegner je Stufe, zufällig gerundet — sonst würde aus 1 × 1,3 in kleinen Räumen stets 2.
+func horde_anzahl(n: int) -> int:
+	var mehr := n * (1.0 + 0.3 * Meta.pakt_stufe("horde"))
+	return int(mehr) + (1 if _rng.randf() < mehr - int(mehr) else 0)
+
+
 func _gegner_setzen() -> int:
 	var zahl := 0
 	# Wer ab welcher Tiefe dazukommt. Dieb und Reparierer sind Einzelgänger (höchstens 2 je Mine).
@@ -235,6 +248,7 @@ func _gegner_setzen() -> int:
 		var n := _rng.randi_range(1, mini(2 + tiefe / 2, 7))
 		if i == gen.reaktor_raum:
 			n += 2
+		n = horde_anzahl(n)
 		for j in n:
 			var pos := LevelGen.welt_von(zellen[_rng.randi_range(0, zellen.size() - 1)])
 			pos += Vector3(_rng.randf_range(-1.5, 1.5), _rng.randf_range(-1.0, 1.0), _rng.randf_range(-1.5, 1.5))
@@ -252,9 +266,10 @@ func _gegner_setzen() -> int:
 		# Schwarm: fünf Drohnen zusammen
 		if tiefe >= 3 and i != gen.reaktor_raum and _rng.randf() < 0.25:
 			var mitte := LevelGen.welt_von(zellen[_rng.randi_range(0, zellen.size() - 1)])
-			for k in 5:
+			var schwarm := horde_anzahl(5)
+			for k in schwarm:
 				_gegner("drohne", mitte + Vector3(_rng.randf_range(-2, 2), _rng.randf_range(-1, 1), _rng.randf_range(-2, 2)))
-			zahl += 5
+			zahl += schwarm
 		if _rng.randf() < 0.35:
 			var art: String = ["schild", "reparatur", "rakete", "erz", "erz"][_rng.randi_range(0, 4)]
 			level.add_child(Beute.neu(art, LevelGen.welt_von(zellen[_rng.randi_range(0, zellen.size() - 1)])))
@@ -289,6 +304,14 @@ func _boss_setzen() -> void:
 func _gegner(typ: String, pos: Vector3) -> Gegner:
 	var g := Gegner.new()
 	g.einrichten(typ, tiefe)
+	# Pakt: zähere Gegner, schnellere Schüsse, wütende Bosse
+	var hp_f := 1.0 + 0.25 * Meta.pakt_stufe("zaeh")
+	if g.ist_boss and Meta.pakt_stufe("wut") > 0:
+		hp_f *= 1.5
+		g.phase2_anteil = 0.7
+	g.hp *= hp_f
+	g.hp_max *= hp_f
+	g.schuss_tempo *= 1.0 + 0.2 * Meta.pakt_stufe("scharf")
 	g.position = pos
 	g.ziel = schiff
 	g.welt = level
@@ -323,7 +346,7 @@ func _umgebung_setzen() -> void:
 	e.background_color = thema.nebel
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	e.ambient_light_color = thema.umgebung
-	e.ambient_light_energy = float(thema.get("umgebung_kraft", 0.35))
+	e.ambient_light_energy = float(thema.get("umgebung_kraft", 0.35)) * (0.5 if Meta.pakt_stufe("dunkel") > 0 else 1.0)
 	e.fog_enabled = true
 	e.fog_light_color = thema.nebel
 	e.fog_density = 0.012
@@ -344,6 +367,18 @@ func _modul_fallen(pos: Vector3, boss: bool) -> Beute:
 	return b
 
 
+## Pakt-Meilenstein: Boss mit Pakt ≥ 5 / ≥ 10 besiegt → einmalig ein episches / legendäres Modul.
+func _pakt_meilenstein(pos: Vector3) -> void:
+	for m in Meta.PAKT_MEILENSTEINE:
+		if Meta.pakt_punkte() >= m[0] and not m[0] in Meta.pakt_meilen:
+			Meta.pakt_meilen.append(m[0])
+			Meta.speichern()
+			var b := _modul_fallen(pos + Vector3(0, 3.0, 0), true)
+			b.modul = Module.erzeugen(_rng, tiefe, true, "", m[1])
+			hud.mitteilung("PAKT %d — MEILENSTEIN\n%s" % [m[0], Module.name_von(b.modul)], 3.0, HUD.GELB)
+			Protokoll.schreib("lauf", "Pakt-Meilenstein %d: %s" % [m[0], Module.name_von(b.modul)])
+
+
 ## Schatzsucher: Bosse lassen doppelt so viel Erz fallen.
 func boss_erz_faktor() -> int:
 	return 2 if Meta.erforscht("b_schatz") else 1
@@ -358,7 +393,8 @@ func _gegner_weg(g: Gegner) -> void:
 		level.add_child.call_deferred(Beute.neu("erz", g.global_position + Vector3(0, 0.8, 0), g.beute))
 	if g.ist_boss:
 		_modul_fallen(g.global_position + Vector3(0, 1.5, 0), true)
-	elif _rng.randf() < MODUL_CHANCE:
+		_pakt_meilenstein(g.global_position)
+	elif _rng.randf() < MODUL_CHANCE * (1.0 + 0.05 * Meta.pakt_punkte()):
 		_modul_fallen(g.global_position + Vector3(0, 0.6, 0), false)
 	if g.ist_boss:
 		for i in 8:     # Bossbeute: ein Kranz aus Erz
@@ -380,7 +416,7 @@ func beute_chance() -> float:
 
 
 func _reaktor_weg() -> void:
-	countdown = gen.fluchtzeit() * float(Meta.schiffswerte().flucht_mult)
+	countdown = gen.fluchtzeit() * float(Meta.schiffswerte().flucht_mult) * (1.0 - 0.2 * Meta.pakt_stufe("lunte"))
 	_alarm_zeit = 0.0
 	_piep_t = 2.0                       # erst die Sirene, dann das Piepen
 	var klang := get_node("/root/Klang")
@@ -413,6 +449,8 @@ func _ausgang_erreicht() -> void:
 	var restzeit := maxi(int(countdown), 0)
 	var gesichert := level_erz
 	level_erz += abschluss + restzeit
+	var pakt_bonus := pakt_erz_bonus(level_erz)
+	level_erz += pakt_bonus
 	Meta.bank += level_erz
 	lauf_erz += level_erz
 	Meta.speichern()
@@ -425,12 +463,18 @@ func _ausgang_erreicht() -> void:
 		["Erz aus dieser Tiefe", "+%d" % gesichert],
 		["Abschlussbonus" + (" (Boss ×2)" if LevelGen.ist_boss_tiefe(tiefe) else ""), "+%d" % abschluss],
 		["Zeitbonus (%d s übrig)" % restzeit, "+%d" % restzeit],
+	] + ([["Paktbonus (Pakt %d · +%d %%)" % [Meta.pakt_punkte(), Meta.pakt_punkte() * 10], "+%d" % pakt_bonus]] if pakt_bonus > 0 else []) + [
 		[_auffuellung(int(schiff.huelle - huelle_vorher), schiff.raketen - raketen_vorher), ""],
 	], level_erz)
 	Protokoll.schreib("level", "Tiefe %d geschafft: Erz %d + Abschlussbonus %d + Zeitbonus %d = %d gesichert (Lauf %d, Bank %d)" % [
 		tiefe, gesichert, abschluss, restzeit, level_erz, lauf_erz, Meta.bank])
 	tiefe += 1
 	call_deferred("_lade_level")
+
+
+## Pakt: +10 % Erz je Paktpunkt auf alles, was eine Tiefe einbringt.
+func pakt_erz_bonus(erz: int) -> int:
+	return int(round(erz * 0.1 * Meta.pakt_punkte()))
 
 
 func _auffuellung(huelle: int, raketen: int) -> String:
@@ -718,6 +762,10 @@ func _autotest() -> void:
 		return
 	if "--zeige-gegner" in OS.get_cmdline_user_args():
 		await _gegner_schau()
+		get_tree().quit(0)
+		return
+	if "--pakt-test" in OS.get_cmdline_user_args():
+		await _pakt_test()
 		get_tree().quit(0)
 		return
 	if "--module-test" in OS.get_cmdline_user_args():
@@ -1691,6 +1739,126 @@ func _aufwertungs_test() -> void:
 		Protokoll.schreib("test", "Aufwertung: " + e)
 	Protokoll.schreib("test", "AUFWERTUNGS-TEST %s" % ("BESTANDEN" if ok else "FEHLGESCHLAGEN"))
 	Meta.zuruecksetzen()     # Teststände nicht in den nächsten Test mitnehmen (gemeinsamer Autotest-Spielstand)
+
+
+## Pakt: Sperre, Umschalten, jede Erschwernis im Spiel, Erzbonus, Meilensteine, Rekord, Hangar.
+func _pakt_test() -> void:
+	var erg: Array[String] = []
+	var ok := true
+	var pruef := func(name: String, gut: bool, text: String):
+		erg.append("%s %s: %s" % ["ok  " if gut else "FEHL", name, text])
+		return gut
+	Meta.zuruecksetzen()
+	Meta.rekord = 4
+	ok = pruef.call("Sperre", not Meta.pakt_umschalten("zaeh") and Meta.pakt_punkte() == 0, "vor Boss 5 nicht schaltbar") and ok
+	Meta.rekord = 12
+	var stufen := []
+	for i in 4:
+		Meta.pakt_umschalten("zaeh")
+		stufen.append(Meta.pakt_stufe("zaeh"))
+	ok = pruef.call("Umschalten", stufen == [1, 2, 3, 0], "Zähe Gegner schaltet %s" % [stufen]) and ok
+	for e in Meta.PAKT:
+		Meta.pakt[e.id] = int(e.max)
+	Meta.speichern()
+	Meta.pakt = {}
+	Meta.laden()
+	ok = pruef.call("Alles an", Meta.pakt_punkte() == 17, "alle Erschwernisse voll: %d Punkte, nach Neuladen" % Meta.pakt_punkte()) and ok
+	ok = pruef.call("Erzbonus", pakt_erz_bonus(100) == 170, "100 Erz → +%d" % pakt_erz_bonus(100)) and ok
+	Meta.start_tiefe = 1
+	_starte_lauf()
+	await _warte(1.0)
+	schiff.tarn_t = 0.0
+	# Gegnerwerte
+	var g := _gegner("jaeger", schiff.global_position + Vector3(0, 0, -30))
+	var ref := Gegner.new()
+	ref.einrichten("jaeger", tiefe)
+	ok = pruef.call("Zähe Gegner", is_equal_approx(g.hp_max, ref.hp_max * 1.75), "Jäger %.0f statt %.0f Leben" % [g.hp_max, ref.hp_max]) and ok
+	ok = pruef.call("Scharfschützen", is_equal_approx(g.schuss_tempo, ref.schuss_tempo * 1.4), "Schusstempo %.1f statt %.1f" % [g.schuss_tempo, ref.schuss_tempo]) and ok
+	ref.free()
+	g.free()
+	# Schiff
+	schiff.unverwundbar = false
+	var s0 := schiff.schild
+	schiff.treffer(10.0)
+	schiff.unverwundbar = true
+	ok = pruef.call("Glaskanone", is_equal_approx(s0 - schiff.schild, 20.0), "Treffer 10 → Schild −%.0f" % (s0 - schiff.schild)) and ok
+	schiff.schild = 0.0
+	schiff._seit_treffer = 99.0
+	schiff.velocity = Vector3.ZERO
+	schiff.schild_laden(2.0)
+	ok = pruef.call("Kein Schildladen", schiff.schild == 0.0, "nach 2 s Stillstand Schild %.1f" % schiff.schild) and ok
+	var lampe: OmniLight3D = null
+	for l in get_tree().get_nodes_in_group("minenlicht"):
+		if l is OmniLight3D and l.omni_range > 10.0:
+			lampe = l
+	var licht_k := float(thema.get("licht", 1.0))
+	ok = pruef.call("Dunkelheit", lampe != null and is_equal_approx(lampe.light_energy, 1.7 * licht_k * 0.5) and is_equal_approx(umgebung.environment.ambient_light_energy, float(thema.get("umgebung_kraft", 0.35)) * 0.5),
+		"Raumlampe %.2f (sonst %.2f), Umgebung %.3f" % [lampe.light_energy if lampe else -1.0, 1.7 * licht_k, umgebung.environment.ambient_light_energy]) and ok
+	# Horde: gleiche Würfel, einmal mit, einmal ohne
+	var zaehle := func(horde: int) -> int:
+		Meta.pakt["horde"] = horde
+		var n := 0
+		for saat in 5:
+			_rng.seed = 4242 + saat
+			n += _gegner_setzen()
+			for x in get_tree().get_nodes_in_group("gegner"):
+				x.free()
+		return n
+	var ohne: int = zaehle.call(0)
+	var mit: int = zaehle.call(2)
+	Meta.pakt["horde"] = 2
+	var summe := 0
+	for i in 10000:
+		summe += horde_anzahl(3)
+	ok = pruef.call("Horde-Rechnung", absf(summe / 30000.0 - 1.6) < 0.02, "3 Gegner → im Mittel %.3f (soll 4,8)" % (summe / 10000.0)) and ok
+	ok = pruef.call("Horde", mit > ohne * 1.4 and mit < ohne * 1.8, "%d statt %d Gegner (×%.2f, soll ~1,6)" % [mit, ohne, float(mit) / ohne]) and ok
+	_reaktor_weg()
+	ok = pruef.call("Kurze Lunte", is_equal_approx(countdown, gen.fluchtzeit() * 0.6), "Fluchtzeit %.1f statt %.1f s" % [countdown, gen.fluchtzeit()]) and ok
+	# Bosse, Meilensteine, Rekord
+	tiefe = 5
+	_lade_level()
+	await _warte(1.0)
+	var bs := boss
+	var bref := Gegner.new()
+	bref.einrichten(bs.typ, tiefe)
+	ok = pruef.call("Wütende Bosse", is_equal_approx(bs.hp_max, bref.hp_max * 1.75 * 1.5) and is_equal_approx(bs.phase2_anteil, 0.7),
+		"%s %.0f statt %.0f Leben, Phase 2 ab %.0f %%" % [bs.typ, bs.hp_max, bref.hp_max, bs.phase2_anteil * 100]) and ok
+	bref.free()
+	for x in get_tree().get_nodes_in_group("beute"):
+		x.free()
+	_gegner_weg(bs)
+	await _warte(0.3)
+	var seltene := []
+	for x in get_tree().get_nodes_in_group("beute"):
+		if x.art == "modul":
+			seltene.append(int(x.modul.selten))
+	seltene.sort()
+	ok = pruef.call("Meilensteine", seltene.size() == 3 and seltene.has(3) and seltene.has(4) and Meta.pakt_meilen == [5, 10],
+		"Boss mit Pakt 17: Module der Seltenheit %s, Meilensteine %s" % [seltene, Meta.pakt_meilen]) and ok
+	for x in get_tree().get_nodes_in_group("beute"):
+		x.free()
+	_gegner_weg(bs)
+	await _warte(0.3)
+	var zweite := get_tree().get_nodes_in_group("beute").filter(func(x): return x.art == "modul").size()
+	ok = pruef.call("Meilenstein einmalig", zweite == 1, "zweiter Bosssieg: %d Modul (nur das normale)" % zweite) and ok
+	ok = pruef.call("Paktrekord", int(Meta.pakt_rekord.punkte) == 17 and int(Meta.pakt_rekord.tiefe) == 5, "Rekord Pakt %d bis Tiefe %d" % [Meta.pakt_rekord.punkte, Meta.pakt_rekord.tiefe]) and ok
+	# Hangar
+	Meta.pakt = {"zaeh": 2, "glas": 1, "lunte": 1}
+	Meta.speichern()
+	_zeige_hangar()
+	hangar.reiter_waehlen("pakt")
+	await _warte(0.6)
+	var k := hangar.find_child("Pakt_dunkel", true, false) as Button
+	k.grab_focus()
+	await _warte(0.2)
+	await _knopf_druck(JOY_BUTTON_A)
+	await _warte(0.3)
+	ok = pruef.call("Hangar", Meta.pakt_stufe("dunkel") == 1 and Meta.pakt_punkte() == 7, "A schaltet Dunkelheit an, Pakt jetzt %d" % Meta.pakt_punkte()) and ok
+	_foto("pakt_hangar")
+	for e in erg:
+		Protokoll.schreib("test", "Pakt: " + e)
+	Protokoll.schreib("test", "PAKT-TEST %s" % ("BESTANDEN" if ok else "FEHLGESCHLAGEN"))
+	Meta.zuruecksetzen()
 
 
 ## Module: Verteilung, Einbauen/Tauschen/Zerlegen, volles Inventar, Wirkung, Boss-Drop, Aufsammeln, Hangar.

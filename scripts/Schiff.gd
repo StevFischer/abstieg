@@ -71,6 +71,8 @@ var f := {}                     ## id -> true für erforschte Knoten
 var tarn_t := 0.0               ## Tarnstart: Restzeit, in der Gegner das Schiff nicht sehen
 var _ueberladung_t := 0.0
 var _schock_cd := 0.0
+var schaden_faktor := 1.0       ## Pakt „Glaskanone“: 2
+var schild_laedt := true        ## Pakt „Kein Schildladen“: false
 const NACHBRENNER_DAUER := 1.5
 const NACHBRENNER_FAKTOR := 2.0
 var pad_aktiv := false          ## zuletzt mit dem Gamepad gesteuert → Zielhilfe an; Maus schaltet sie aus
@@ -242,7 +244,7 @@ func schild_laden(dt: float) -> void:
 	if f.has("s_nano") and huelle < huelle_max * 0.5:      # Nanoreparatur
 		huelle = minf(huelle + 0.5 * dt, huelle_max * 0.5)
 	_seit_treffer += dt
-	if _seit_treffer >= schild_pause:
+	if schild_laedt and _seit_treffer >= schild_pause:
 		var rate := SCHILD_LADEN * schild_laden_mult * (SCHILD_STEHEND if velocity.length() < STILLSTAND else (1.5 if f.has("s_feld") else 1.0))
 		schild = minf(schild_max, schild + rate * dt)
 
@@ -429,6 +431,7 @@ func treffer(s: float) -> void:
 	if unverwundbar or not aktiv:
 		return
 	_seit_treffer = 0.0
+	s *= schaden_faktor
 	schild -= s
 	if schild < 0.0:
 		huelle += schild      # was der Schild nicht abfängt, trifft die Hülle

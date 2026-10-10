@@ -506,8 +506,10 @@ func _strahl_zeigen(nach: Vector3) -> void:
 
 # --- Bosse -------------------------------------------------------------------
 
+var phase2_anteil := 0.5       ## Pakt „Wütende Bosse“: schon ab 70 %
+
 func _phase_pruefen() -> void:
-	if phase == 1 and hp < hp_max * 0.5:
+	if phase == 1 and hp < hp_max * phase2_anteil:
 		phase = 2
 		cd_basis *= 0.6
 		phase_zwei.emit(self)
