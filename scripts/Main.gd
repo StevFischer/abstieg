@@ -512,6 +512,17 @@ func _beute_schau() -> void:
 	await _warte(1.2)
 	_foto("beute_meldung")
 	Protokoll.schreib("test", "Beute-Schau: Hülle jetzt %.0f (vorher 50)" % schiff.huelle)
+	# Raketen sind voll: Einfliegen darf nichts nehmen und muss "RAKETEN VOLL" melden
+	var vorrat := schiff.raketen
+	var rp: Vector3 = Vector3.ZERO
+	for b in get_tree().get_nodes_in_group("beute_rakete"):
+		rp = b.global_position
+		break
+	schiff.autopilot.append(rp)
+	await _warte(1.5)
+	_foto("beute_voll")
+	Protokoll.schreib("test", "Beute-Schau: Raketen vorher %d, nachher %d, Fundstück noch da: %s" % [
+		vorrat, schiff.raketen, not get_tree().get_nodes_in_group("beute_rakete").is_empty()])
 
 
 func _warte(s: float) -> void:

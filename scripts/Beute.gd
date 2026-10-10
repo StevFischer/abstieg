@@ -130,6 +130,7 @@ func _ready() -> void:
 	l.omni_range = 4.0
 	l.light_energy = 1.0
 	add_child(l)
+	add_to_group("beute_" + art)
 	body_entered.connect(_rein)
 
 
