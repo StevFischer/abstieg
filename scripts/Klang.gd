@@ -6,6 +6,14 @@ extends Node
 
 const RATE := 44100
 const MAX_GLEICHZEITIG := 28
+## Lautstärkeregler: je Regler ein Audiokanal (Bus). "gesamt" ist der Hauptkanal.
+const KANAELE := {"gesamt": "Master", "laser": "Laser", "gegner": "Gegner", "explosionen": "Explosionen"}
+const KANAL_NAMEN := {"gesamt": "Gesamt", "laser": "Eigener Laser", "gegner": "Gegnerschüsse", "explosionen": "Explosionen"}
+const TON_KANAL := {"laser": "Laser", "laser_gegner": "Gegner", "einschlag": "Explosionen",
+	"explosion": "Explosionen", "explosion_gross": "Explosionen"}
+
+var lautstaerke := {"gesamt": 1.0, "laser": 1.0, "gegner": 1.0, "explosionen": 1.0}
+var _einstellungen := "user://abstieg_einstellungen.cfg"
 
 var toene := {}
 var zaehler := {}        ## je Ton, wie oft er abgespielt wurde — für Selbsttest und Log
@@ -14,7 +22,18 @@ var _rng := RandomNumberGenerator.new()
 
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS   # Probetöne im Optionen-Bildschirm auch in der Pause
 	_rng.seed = 4711
+	if "--autotest" in OS.get_cmdline_user_args():
+		_einstellungen = "user://abstieg_einstellungen_autotest.cfg"
+	for k in KANAELE:
+		var bus: String = KANAELE[k]
+		if AudioServer.get_bus_index(bus) < 0:
+			AudioServer.add_bus()
+			var i := AudioServer.bus_count - 1
+			AudioServer.set_bus_name(i, bus)
+			AudioServer.set_bus_send(i, "Master")
+	laden()
 	# Begrenzer am Hauptkanal: viele gleichzeitige Einschläge dürfen nicht übersteuern.
 	var begrenzer := AudioEffectHardLimiter.new()
 	begrenzer.ceiling_db = -1.0
@@ -39,12 +58,14 @@ func spiele(name: String, pos: Variant = null, db := 0.0) -> void:
 		var a := AudioStreamPlayer.new()
 		a.stream = toene[name]
 		a.volume_db = db
+		a.bus = TON_KANAL.get(name, "Master")
 		a.pitch_scale = _rng.randf_range(0.94, 1.06)
 		p = a
 	else:
 		var a3 := AudioStreamPlayer3D.new()
 		a3.stream = toene[name]
 		a3.volume_db = db
+		a3.bus = TON_KANAL.get(name, "Master")
 		a3.unit_size = 12.0
 		a3.max_distance = 140.0
 		a3.pitch_scale = _rng.randf_range(0.9, 1.1)
@@ -56,6 +77,28 @@ func spiele(name: String, pos: Variant = null, db := 0.0) -> void:
 		_laufend -= 1
 		p.queue_free())
 	p.play()
+
+
+func setze(kanal: String, wert: float) -> void:
+	lautstaerke[kanal] = clampf(wert, 0.0, 1.0)
+	var i := AudioServer.get_bus_index(KANAELE[kanal])
+	AudioServer.set_bus_volume_db(i, linear_to_db(maxf(lautstaerke[kanal], 0.0001)))
+	AudioServer.set_bus_mute(i, lautstaerke[kanal] <= 0.001)
+
+
+func laden() -> void:
+	var c := ConfigFile.new()
+	c.load(_einstellungen)
+	for k in KANAELE:
+		setze(k, float(c.get_value("lautstaerke", k, 1.0)))
+
+
+func speichern() -> void:
+	var c := ConfigFile.new()
+	for k in KANAELE:
+		c.set_value("lautstaerke", k, lautstaerke[k])
+	var e := c.save(_einstellungen)
+	Protokoll.schreib("klang", "Lautstärke gespeichert %s (%s)" % [lautstaerke, error_string(e)])
 
 
 func _laser(f0: float, f1: float, dauer: float, rechteck: float) -> AudioStreamWAV:

@@ -12,6 +12,7 @@ var hud: HUD
 var hangar: Hangar
 var hangar_ebene: CanvasLayer
 var pause_ebene: CanvasLayer
+var optionen: Optionen
 var umgebung: WorldEnvironment
 var thema: Dictionary
 
@@ -23,6 +24,7 @@ var countdown := -1.0
 var leitstrahl := true
 var autotest := false
 var _leit_t := 0.0
+var _opt_zu_bild := -1   ## Bild, in dem die Optionen per Esc geschlossen wurden — dieselbe Esc soll nicht auch die Pause beenden
 var _leit_ziel := Vector3.ZERO
 var _leit_weg := 0.0
 var _rng := RandomNumberGenerator.new()
@@ -50,10 +52,20 @@ func _ready() -> void:
 	hangar.beenden.connect(func(): get_tree().quit())
 	hangar_ebene.add_child(hangar)
 	_pause_bauen()
+	var opt_ebene := CanvasLayer.new()
+	opt_ebene.layer = 30
+	add_child(opt_ebene)
+	optionen = Optionen.new()
+	optionen.visible = false
+	opt_ebene.add_child(optionen)
+	optionen.zurueck.connect(_optionen_zu)
+	hangar.optionen.connect(_optionen_auf)
 	if autotest:
 		_autotest()
 	else:
 		_zeige_hangar()
+		if "--zeige-optionen" in OS.get_cmdline_user_args():
+			_optionen_auf()
 
 
 # --- Ablauf -----------------------------------------------------------------
@@ -252,7 +264,8 @@ func _schiff_tot(grund: String) -> void:
 # --- Jedes Bild ----------------------------------------------------------------
 
 func _process(dt: float) -> void:
-	if Input.is_action_just_pressed("pause") and zustand == "flug" and not autotest:
+	if Input.is_action_just_pressed("pause") and zustand == "flug" and not autotest and not optionen.visible \
+			and Engine.get_process_frames() != _opt_zu_bild:
 		_pause(not get_tree().paused)
 	if get_tree().paused or schiff == null or zustand != "flug":
 		return
@@ -327,6 +340,7 @@ func _pause_bauen() -> void:
 	titel.add_theme_color_override("font_color", Hangar.ORANGE)
 	spalte.add_child(titel)
 	for eintrag in [["Weiter", func(): _pause(false)],
+			["Optionen", func(): _optionen_auf()],
 			["Lauf aufgeben", func():
 				_pause(false)
 				_schiff_tot("Lauf aufgegeben")],
@@ -337,6 +351,21 @@ func _pause_bauen() -> void:
 		b.add_theme_font_size_override("font_size", 24)
 		b.pressed.connect(eintrag[1])
 		spalte.add_child(b)
+
+
+func _optionen_auf() -> void:
+	optionen.aufbauen()
+	optionen.visible = true
+
+
+func _optionen_zu() -> void:
+	optionen.visible = false
+	_opt_zu_bild = Engine.get_process_frames()
+	if zustand == "hangar":
+		hangar.aufbauen()
+	else:
+		var erster: Button = pause_ebene.find_children("*", "Button", true, false)[0]
+		erster.grab_focus()
 
 
 func _pause(an: bool) -> void:
@@ -356,6 +385,21 @@ func _autotest() -> void:
 	var aufnahme := AudioEffectRecord.new()
 	AudioServer.add_bus_effect(0, aufnahme)
 	aufnahme.set_recording_active(true)
+	# Lautstärke: Regler setzen, Bus messen, aus der Datei neu laden
+	var klang := get_node("/root/Klang")
+	klang.setze("explosionen", 0.25)
+	klang.setze("gegner", 0.0)
+	klang.speichern()
+	klang.lautstaerke["explosionen"] = 1.0
+	klang.laden()
+	var bus_ex := AudioServer.get_bus_volume_db(AudioServer.get_bus_index("Explosionen"))
+	var stumm := AudioServer.is_bus_mute(AudioServer.get_bus_index("Gegner"))
+	var lautst_ok: bool = absf(bus_ex - linear_to_db(0.25)) < 0.1 and stumm and is_equal_approx(klang.lautstaerke["explosionen"], 0.25)
+	Protokoll.schreib("test", "Lautstärke: Explosionen-Bus %.1f dB nach Neuladen (Soll %.1f), Gegner stumm %s → %s" % [
+		bus_ex, linear_to_db(0.25), stumm, "ok" if lautst_ok else "FEHLER"])
+	klang.setze("explosionen", 1.0)
+	klang.setze("gegner", 1.0)
+	klang.speichern()
 	_starte_lauf()
 	schiff.unverwundbar = true
 	for a in OS.get_cmdline_user_args():
@@ -363,7 +407,7 @@ func _autotest() -> void:
 			tiefe = int(a.get_slice("=", 1))
 			_lade_level()
 	var abdruecke := [gen.fingerabdruck()]
-	var ok := true
+	var ok := lautst_ok
 	for runde in 2:
 		var t := tiefe
 		await _warte(1.5)

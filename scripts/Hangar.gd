@@ -4,6 +4,7 @@ extends Control
 
 signal starten
 signal beenden
+signal optionen
 
 const ORANGE := Color(1.0, 0.6, 0.2)
 
@@ -62,6 +63,11 @@ func aufbauen() -> void:
 	los.pressed.connect(func(): starten.emit())
 	spalte.add_child(los)
 	erster = los
+	var opt := Button.new()
+	opt.text = "Optionen"
+	opt.custom_minimum_size = Vector2(0, 40)
+	opt.pressed.connect(func(): optionen.emit())
+	spalte.add_child(opt)
 	var ende := Button.new()
 	ende.text = "Beenden"
 	ende.custom_minimum_size = Vector2(0, 40)
