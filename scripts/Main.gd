@@ -2013,6 +2013,17 @@ func _pad_test() -> void:
 	ok = pruef.call("Standard", Eingabe.pad_text("licht") == "Y" and Eingabe.pad_text("feuer") == "RT" and Eingabe.pad_text("leitstrahl") == "—",
 		"Scheinwerfer „%s“, Laser „%s“, Leitstrahl „%s“" % [Eingabe.pad_text("licht"), Eingabe.pad_text("feuer"), Eingabe.pad_text("leitstrahl")]) and ok
 	_optionen_zu()
+	await _warte(0.3)
+	# Die Controller-Zeile im Hangar muss in die Breite passen (2026-10-11: lief mit „Steuerkreuz ← / Steuerkreuz →“ aus dem Bild)
+	var zeile := ""
+	var groesse := 16
+	for l in hangar.find_children("*", "Label", true, false):
+		if l.text.contains("Controller:"):
+			zeile = l.text.get_slice("\n", l.text.count("\n"))
+			groesse = l.get_theme_font_size("font_size")
+	var breite := ThemeDB.fallback_font.get_string_size(zeile, HORIZONTAL_ALIGNMENT_LEFT, -1, groesse).x
+	var platz := hangar.get_viewport_rect().size.x
+	ok = pruef.call("Hilfszeile passt", breite <= platz, "%.0f von %.0f Punkten: %s" % [breite, platz, zeile.right(60)]) and ok
 	for e in erg:
 		Protokoll.schreib("test", "Controller-Belegung: " + e)
 	Protokoll.schreib("test", "PAD-TEST %s" % ("BESTANDEN" if ok else "FEHLGESCHLAGEN"))

@@ -144,10 +144,10 @@ func aufbauen() -> void:
 			E.text_fuer("waffe_1"), E.text_fuer("waffe_8"), E.text_fuer("nachbrenner"), E.text_fuer("notfallschild"),
 			(" · %s Leitstrahl" % E.text_fuer("leitstrahl")) if E.text_fuer("leitstrahl") != "—" else "", E.text_fuer("licht"), E.text_fuer("pause")])
 	spalte.add_child(_label(tastatur +
-		("Controller: linker Stick fliegen · rechter Stick drehen · %s/%s rollen · %s/%s hoch/runter · %s Laser · %s Rakete · %s Nachbrenner · %s Notfallschild · %s/%s Laser, %s Rakete · Hangar: %s/%s Reiter" % [
+		("Controller: linker Stick fliegen · rechter Stick drehen · %s/%s rollen · %s/%s hoch/runter · %s Laser · %s Rakete · %s Nachbrenner · %s Notfallschild · %s Laser, %s Rakete · Hangar: %s/%s Reiter" % [
 			E.pad_text("rollen_links"), E.pad_text("rollen_rechts"), E.pad_text("hoch"), E.pad_text("runter"), E.pad_text("feuer"),
-			E.pad_text("rakete"), E.pad_text("nachbrenner"), E.pad_text("notfallschild"), E.pad_text("laser_zurueck"), E.pad_text("laser_weiter"),
-			E.pad_text("rakete_weiter"), E.pad_text("rollen_links"), E.pad_text("rollen_rechts")]),
+			E.pad_text("rakete"), E.pad_text("nachbrenner"), E.pad_text("notfallschild"), _pad_kurz(["laser_zurueck", "laser_weiter"]),
+			_pad_kurz(["rakete_weiter"]), E.pad_text("rollen_links"), E.pad_text("rollen_rechts")]),
 		16, Color(0.6, 0.58, 0.52), true))
 	# Nach einem Kauf bleibt der Fokus auf demselben Knopf (Controller), sonst auf "Abstieg beginnen".
 	var ziel: Control = erster
@@ -818,6 +818,18 @@ func _starttiefe_zeile(spalte: VBoxContainer) -> void:
 		_start_knoepfe.append(b)
 	if Meta.starttiefen().size() == 1:
 		reihe.add_child(_label("Weitere Starttiefen nach dem ersten besiegten Boss (Tiefe 5).", 16, Color(0.6, 0.58, 0.52), false))
+
+
+## Hilfszeile: Steuerkreuz-Belegungen knapp, z. B. „Steuerkreuz ←/→“ statt „Steuerkreuz ← / Steuerkreuz →“,
+## sonst läuft die Zeile aus dem Bild.
+func _pad_kurz(aktionen: Array) -> String:
+	var teile: Array[String] = []
+	for a in aktionen:
+		teile.append(Eingabe.pad_text(a))
+	var t := "/".join(teile).replace(" / ", "/")
+	if t.contains("Steuerkreuz "):
+		t = "Steuerkreuz " + t.replace("Steuerkreuz ", "")
+	return t
 
 
 func _label(text: String, groesse: int, farbe: Color, zentriert: bool) -> Label:
