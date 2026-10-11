@@ -2,7 +2,8 @@ extends Node
 ## Tastenbelegung im Code: Maus/Tastatur und Controller nebeneinander.
 ## Die Maus dreht direkt (wie Descent mit flightsim=0), das liest Schiff.gd selbst aus.
 ## Tastatur und Maustasten sind in den Optionen umbelegbar (Stev 2026-10-10); die eigene Belegung steht in
-## user://abstieg_tasten.cfg, der Controller bleibt fest.
+## user://abstieg_tasten.cfg. Seit 2026-10-11 auch die Controller-Knöpfe und Trigger (Stev: „für Controller die
+## Tastenbelegung“ fehlte am Handy); die Sticks bleiben fest, Menüs bedienen sich weiter mit Steuerkreuz und A/B.
 
 ## Umbelegbare Aktionen in der Reihenfolge der Optionsliste: [Aktion, Anzeigename]
 const BELEGBAR := [
@@ -13,7 +14,15 @@ const BELEGBAR := [
 	["waffe_1", "Laser 1"], ["waffe_2", "Laser 2"], ["waffe_3", "Laser 3"], ["waffe_4", "Laser 4"],
 	["waffe_5", "Rakete 5"], ["waffe_6", "Rakete 6"], ["waffe_7", "Rakete 7"], ["waffe_8", "Rakete 8"],
 ]
+## Am Controller umbelegbar: Knöpfe und Trigger, nicht die Sticks
+const PAD_BELEGBAR := [
+	["hoch", "Hoch"], ["runter", "Runter"], ["rollen_links", "Rollen links"], ["rollen_rechts", "Rollen rechts"],
+	["feuer", "Laser feuern"], ["rakete", "Rakete feuern"], ["nachbrenner", "Nachbrenner"], ["notfallschild", "Notfallschild"],
+	["leitstrahl", "Leitstrahl"], ["licht", "Scheinwerfer"], ["pause", "Pause"],
+	["laser_weiter", "Nächster Laser"], ["laser_zurueck", "Voriger Laser"], ["rakete_weiter", "Nächste Rakete"],
+]
 var _standard := {}          ## Aktion -> Liste der PC-Ereignisse ab Werk
+var _standard_pad := {}      ## Aktion -> Liste der Controller-Ereignisse (Knöpfe, Trigger) ab Werk
 var _datei := "user://abstieg_tasten.cfg"
 const FASSUNG := 2           ## 2: Leitstrahl ab Werk unbelegt (2026-10-11)
 
@@ -50,6 +59,8 @@ func _ready() -> void:
 	_aktion("rakete_weiter", [], [JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_DOWN], [])
 	for b in BELEGBAR:
 		_standard[b[0]] = pc_ereignisse(b[0])
+	for b in PAD_BELEGBAR:
+		_standard_pad[b[0]] = pad_ereignisse(b[0])
 	if "--autotest" in OS.get_cmdline_user_args():
 		_datei = "user://abstieg_tasten_autotest.cfg"
 	laden()
@@ -58,6 +69,79 @@ func _ready() -> void:
 ## Tastatur- und Mausereignisse einer Aktion (ohne Controller)
 func pc_ereignisse(aktion: String) -> Array:
 	return InputMap.action_get_events(aktion).filter(func(e): return e is InputEventKey or e is InputEventMouseButton)
+
+
+## Controller-Knöpfe und Trigger einer Aktion (ohne Sticks)
+func pad_ereignisse(aktion: String) -> Array:
+	return InputMap.action_get_events(aktion).filter(func(e): return e is InputEventJoypadButton or \
+		(e is InputEventJoypadMotion and e.axis in [JOY_AXIS_TRIGGER_LEFT, JOY_AXIS_TRIGGER_RIGHT]))
+
+
+func _setze_pad(aktion: String, liste: Array) -> void:
+	for e in pad_ereignisse(aktion):
+		InputMap.action_erase_event(aktion, e)
+	for e in liste:
+		InputMap.action_add_event(aktion, e)
+
+
+func _gleich_pad(a: InputEvent, b: InputEvent) -> bool:
+	if a is InputEventJoypadButton and b is InputEventJoypadButton:
+		return a.button_index == b.button_index
+	if a is InputEventJoypadMotion and b is InputEventJoypadMotion:
+		return a.axis == b.axis
+	return false
+
+
+## Controller neu belegen, mit Tausch wie bei der Tastatur. Nimmt Knöpfe und Trigger (Achse 4/5), sonst nichts.
+func belegen_pad(aktion: String, e: InputEvent) -> String:
+	var neu: InputEvent
+	if e is InputEventJoypadButton:
+		neu = InputEventJoypadButton.new()
+		neu.button_index = e.button_index
+	elif e is InputEventJoypadMotion and e.axis in [JOY_AXIS_TRIGGER_LEFT, JOY_AXIS_TRIGGER_RIGHT]:
+		neu = InputEventJoypadMotion.new()
+		neu.axis = e.axis
+		neu.axis_value = 1.0
+	else:
+		return ""
+	var alt := pad_ereignisse(aktion)
+	var getauscht := ""
+	for b in PAD_BELEGBAR:
+		if b[0] == aktion:
+			continue
+		var andere := pad_ereignisse(b[0])
+		var rest := andere.filter(func(x): return not _gleich_pad(x, neu))
+		if rest.size() != andere.size():
+			getauscht = b[0]
+			_setze_pad(b[0], rest if not rest.is_empty() else alt)
+	_setze_pad(aktion, [neu])
+	speichern()
+	Protokoll.schreib("tasten", "Controller %s → %s%s" % [aktion, pad_text(aktion), (" (getauscht mit %s → %s)" % [getauscht, pad_text(getauscht)]) if getauscht != "" else ""])
+	return getauscht
+
+
+func zuruecksetzen_pad() -> void:
+	for a in _standard_pad:
+		_setze_pad(a, _standard_pad[a])
+	speichern()
+	Protokoll.schreib("tasten", "Controller-Belegung auf Standard zurückgesetzt")
+
+
+const PAD_NAMEN := {JOY_BUTTON_A: "A", JOY_BUTTON_B: "B", JOY_BUTTON_X: "X", JOY_BUTTON_Y: "Y",
+	JOY_BUTTON_LEFT_SHOULDER: "LB", JOY_BUTTON_RIGHT_SHOULDER: "RB", JOY_BUTTON_BACK: "Select", JOY_BUTTON_START: "Start",
+	JOY_BUTTON_GUIDE: "Home", JOY_BUTTON_LEFT_STICK: "L3", JOY_BUTTON_RIGHT_STICK: "R3",
+	JOY_BUTTON_DPAD_UP: "Steuerkreuz ↑", JOY_BUTTON_DPAD_DOWN: "Steuerkreuz ↓", JOY_BUTTON_DPAD_LEFT: "Steuerkreuz ←",
+	JOY_BUTTON_DPAD_RIGHT: "Steuerkreuz →"}
+
+## Lesbarer Name der Controller-Belegung, z. B. „RT“ oder „Steuerkreuz ↑ / Steuerkreuz ↓“.
+func pad_text(aktion: String) -> String:
+	var teile: Array[String] = []
+	for e in pad_ereignisse(aktion):
+		if e is InputEventJoypadButton:
+			teile.append(PAD_NAMEN.get(e.button_index, "Knopf %d" % e.button_index))
+		else:
+			teile.append("LT" if e.axis == JOY_AXIS_TRIGGER_LEFT else "RT")
+	return " / ".join(teile) if not teile.is_empty() else "—"
 
 
 func _setze_pc(aktion: String, liste: Array) -> void:
@@ -117,6 +201,11 @@ func speichern() -> void:
 		for e in pc_ereignisse(b[0]):
 			liste.append(("taste:%d" % e.physical_keycode) if e is InputEventKey else ("maus:%d" % e.button_index))
 		c.set_value("tasten", b[0], liste)
+	for b in PAD_BELEGBAR:
+		var liste: Array[String] = []
+		for e in pad_ereignisse(b[0]):
+			liste.append(("knopf:%d" % e.button_index) if e is InputEventJoypadButton else ("achse:%d" % e.axis))
+		c.set_value("controller", b[0], liste)
 	c.set_value("stand", "fassung", FASSUNG)
 	c.save(_datei)
 
@@ -145,6 +234,23 @@ func laden() -> void:
 				m.button_index = int(teil[1]) as MouseButton
 				ereignisse.append(m)
 		_setze_pc(b[0], ereignisse)
+	for b in PAD_BELEGBAR:
+		var liste: Array = c.get_value("controller", b[0], [])
+		if liste.is_empty():
+			continue
+		var ereignisse := []
+		for eintrag: String in liste:
+			var teil := eintrag.split(":")
+			if teil[0] == "knopf":
+				var k := InputEventJoypadButton.new()
+				k.button_index = int(teil[1]) as JoyButton
+				ereignisse.append(k)
+			else:
+				var m := InputEventJoypadMotion.new()
+				m.axis = int(teil[1]) as JoyAxis
+				m.axis_value = 1.0
+				ereignisse.append(m)
+		_setze_pad(b[0], ereignisse)
 
 
 const NAMEN := {"Shift": "Umschalt", "Ctrl": "Strg", "Space": "Leertaste", "Escape": "Esc", "Enter": "Eingabe",

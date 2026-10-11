@@ -138,6 +138,12 @@ func werte_setzen(w: Dictionary) -> void:
 		f[id] = true
 
 
+## Touch: Ziehen auf der rechten Bildhälfte dreht wie die Maus (Touch.gd)
+func touch_drehen(rel: Vector2) -> void:
+	_maus += rel
+	pad_aktiv = false
+
+
 func _unhandled_input(e: InputEvent) -> void:
 	if e is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		_maus += e.relative

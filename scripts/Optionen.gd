@@ -18,6 +18,11 @@ func _init() -> void:
 
 func _process(dt: float) -> void:
 	_probe_t -= dt
+	if _wartet_pad != "":
+		_pad_warte_t -= dt
+		if _pad_warte_t <= 0.0:          # nichts gedrückt: abbrechen (jeder Knopf soll belegbar sein, auch B und Start)
+			_wartet_pad = ""
+		_pad_zeigen()
 
 
 func aufbauen() -> void:
@@ -78,6 +83,7 @@ func aufbauen() -> void:
 			erster = regler
 	if not OS.has_feature("android"):
 		_tasten_liste(spalte)
+	_pad_liste(spalte)
 	var zur := Button.new()
 	zur.text = "Zurück"
 	zur.custom_minimum_size = Vector2(0, 52)
@@ -141,7 +147,81 @@ func _warten_auf(aktion: String) -> void:
 	_tasten_zeigen()
 
 
+## Controller (Stev 2026-10-11): je Aktion ein Knopf; drücken, dann den neuen Knopf oder Trigger am Controller.
+## Nach 5 s ohne Eingabe bricht es ab, damit auch B und Start belegbar bleiben.
+const PAD_WARTEN := 5.0
+var _wartet_pad := ""
+var _pad_warte_t := 0.0
+var _pad_knoepfe := {}
+var _pad_info: Label
+
+func _pad_liste(spalte: VBoxContainer) -> void:
+	spalte.add_child(_text("CONTROLLER", 22, ORANGE))
+	var raster := GridContainer.new()
+	raster.columns = 4
+	raster.add_theme_constant_override("h_separation", 16)
+	raster.add_theme_constant_override("v_separation", 6)
+	spalte.add_child(raster)
+	_pad_knoepfe.clear()
+	for b in Eingabe.PAD_BELEGBAR:
+		var name_l := _text(b[1], 20, Color(0.9, 0.88, 0.8))
+		name_l.custom_minimum_size = Vector2(170, 0)
+		raster.add_child(name_l)
+		var k := Button.new()
+		k.name = "Pad_" + b[0]
+		k.custom_minimum_size = Vector2(220, 38)
+		k.add_theme_font_size_override("font_size", 18)
+		var aktion: String = b[0]
+		k.pressed.connect(func(): _pad_warten_auf(aktion))
+		raster.add_child(k)
+		_pad_knoepfe[aktion] = k
+	_pad_info = _text("Feld wählen, dann am Controller den neuen Knopf oder Trigger drücken (5 s Zeit). Doppelt belegt? Dann tauschen die beiden. Sticks und die Menüführung (Steuerkreuz, A/B) bleiben fest.",
+		16, Color(0.6, 0.58, 0.52))
+	_pad_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	spalte.add_child(_pad_info)
+	var std := Button.new()
+	std.name = "PadStandard"
+	std.text = "Controller auf Standard zurücksetzen"
+	std.custom_minimum_size = Vector2(0, 40)
+	std.add_theme_font_size_override("font_size", 18)
+	std.pressed.connect(func():
+		Eingabe.zuruecksetzen_pad()
+		_pad_zeigen())
+	spalte.add_child(std)
+	_pad_zeigen()
+
+
+func _pad_zeigen() -> void:
+	for a in _pad_knoepfe:
+		_pad_knoepfe[a].text = ("Knopf drücken … %d" % ceili(_pad_warte_t)) if a == _wartet_pad else Eingabe.pad_text(a)
+
+
+func _pad_warten_auf(aktion: String) -> void:
+	_wartet_pad = aktion
+	_pad_warte_t = PAD_WARTEN
+	_pad_seit = Engine.get_process_frames()
+	_pad_zeigen()
+
+var _pad_seit := 0
+
+
 func _input(e: InputEvent) -> void:
+	if _wartet_pad != "" and visible:
+		var knopf: bool = e is InputEventJoypadButton and e.pressed
+		var trigger: bool = e is InputEventJoypadMotion and e.axis in [JOY_AXIS_TRIGGER_LEFT, JOY_AXIS_TRIGGER_RIGHT] and e.axis_value > 0.6
+		# Der Druck, der das Warten ausgelöst hat (A), kommt im selben Bild — erst ab dem nächsten zählen
+		if (knopf or trigger) and Engine.get_process_frames() > _pad_seit:
+			get_viewport().set_input_as_handled()
+			var a := _wartet_pad
+			_wartet_pad = ""
+			var getauscht := Eingabe.belegen_pad(a, e)
+			if getauscht != "":
+				_pad_info.text = "%s hatte diesen Knopf — jetzt auf %s." % [_pad_name_von(getauscht), Eingabe.pad_text(getauscht)]
+			_pad_zeigen()
+			_pad_knoepfe[a].call_deferred("grab_focus")
+		elif knopf or trigger or e is InputEventJoypadButton:
+			get_viewport().set_input_as_handled()     # auch das Loslassen von A nicht an die Menüführung geben
+		return
 	if _wartet == "" or not visible:
 		return
 	var ist_taste: bool = e is InputEventKey and e.pressed and not e.echo
@@ -161,6 +241,13 @@ func _input(e: InputEvent) -> void:
 	_knoepfe[aktion].call_deferred("grab_focus")
 
 
+func _pad_name_von(aktion: String) -> String:
+	for b in Eingabe.PAD_BELEGBAR:
+		if b[0] == aktion:
+			return b[1]
+	return aktion
+
+
 func _name_von(aktion: String) -> String:
 	for b in Eingabe.BELEGBAR:
 		if b[0] == aktion:
@@ -169,7 +256,7 @@ func _name_von(aktion: String) -> String:
 
 
 func _unhandled_input(e: InputEvent) -> void:
-	if visible and e.is_action_pressed("ui_cancel"):
+	if visible and _wartet_pad == "" and e.is_action_pressed("ui_cancel"):
 		get_viewport().set_input_as_handled()
 		_schliessen()
 

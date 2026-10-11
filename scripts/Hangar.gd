@@ -144,7 +144,10 @@ func aufbauen() -> void:
 			E.text_fuer("waffe_1"), E.text_fuer("waffe_8"), E.text_fuer("nachbrenner"), E.text_fuer("notfallschild"),
 			(" · %s Leitstrahl" % E.text_fuer("leitstrahl")) if E.text_fuer("leitstrahl") != "—" else "", E.text_fuer("licht"), E.text_fuer("pause")])
 	spalte.add_child(_label(tastatur +
-		"Controller: linker Stick fliegen · rechter Stick drehen · LB/RB rollen · A/B hoch/runter · RT Laser · LT Rakete · X Nachbrenner · R3 Notfallschild · Steuerkreuz ←→ Laser, ↑↓ Rakete · Hangar: LB/RB Reiter",
+		("Controller: linker Stick fliegen · rechter Stick drehen · %s/%s rollen · %s/%s hoch/runter · %s Laser · %s Rakete · %s Nachbrenner · %s Notfallschild · %s/%s Laser, %s Rakete · Hangar: %s/%s Reiter" % [
+			E.pad_text("rollen_links"), E.pad_text("rollen_rechts"), E.pad_text("hoch"), E.pad_text("runter"), E.pad_text("feuer"),
+			E.pad_text("rakete"), E.pad_text("nachbrenner"), E.pad_text("notfallschild"), E.pad_text("laser_zurueck"), E.pad_text("laser_weiter"),
+			E.pad_text("rakete_weiter"), E.pad_text("rollen_links"), E.pad_text("rollen_rechts")]),
 		16, Color(0.6, 0.58, 0.52), true))
 	# Nach einem Kauf bleibt der Fokus auf demselben Knopf (Controller), sonst auf "Abstieg beginnen".
 	var ziel: Control = erster

@@ -23,6 +23,7 @@ var level_erz := 0
 var lauf_erz := 0
 var countdown := -1.0
 var leitstrahl := true
+var touch: Touch
 var neuer_gegner := ""         ## Hinweis auf die Art, die diese Tiefe einführt (HUD.hinweis unter dem Fadenkreuz)
 var schwarm_je_raum := {}      ## Raum → Zahl der Drohnenschwärme der zuletzt besetzten Mine (für --besetzung-test)
 var autotest := false
@@ -41,7 +42,7 @@ var _alarm_zeit := 0.0
 
 func _ready() -> void:
 	# Im Browser gibt es keine Systemschriften: ● ○ ★ ← → fehlen in der eingebauten Schrift (Kästchen).
-	if OS.has_feature("web"):
+	if OS.has_feature("web") or OS.has_feature("android"):     # Android: für die Zeichen der Touch-Knöpfe (↺ ↻ ⇄ ▲ ▼)
 		var ersatz: Font = load("res://assets/schrift/DejaVuSans.ttf")
 		ThemeDB.fallback_font.fallbacks = ThemeDB.fallback_font.fallbacks + [ersatz]
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -66,6 +67,12 @@ func _ready() -> void:
 	hud = HUD.new()
 	hud.visible = false
 	add_child(hud)
+	var touch_ebene := CanvasLayer.new()       # über dem HUD, unter Hangar (10) und Pause
+	touch_ebene.layer = 6
+	add_child(touch_ebene)
+	touch = Touch.new()
+	touch.main = self
+	touch_ebene.add_child(touch)
 	hangar_ebene = CanvasLayer.new()
 	hangar_ebene.layer = 10
 	add_child(hangar_ebene)
@@ -1008,6 +1015,14 @@ func _autotest() -> void:
 		await _geschoss_schau()
 		get_tree().quit(0)
 		return
+	if "--touch-test" in OS.get_cmdline_user_args():
+		await _touch_test()
+		get_tree().quit(0)
+		return
+	if "--pad-test" in OS.get_cmdline_user_args():
+		await _pad_test()
+		get_tree().quit(0)
+		return
 	if "--besetzung-test" in OS.get_cmdline_user_args():
 		_besetzung_test()
 		get_tree().quit(0)
@@ -1812,6 +1827,188 @@ func _geschoss_schau() -> void:
 
 
 ## Tastenbelegung: Anzeige, Umbelegen über die Optionen (echter Tastendruck), Tausch, Speichern/Laden, Standard.
+## Touch-Steuerung (Stev 2026-10-11): Berührungen simulieren und die Wirkung am Schiff messen. Start mit --touch.
+func _touch_test() -> void:
+	var erg: Array[String] = []
+	var ok := true
+	var pruef := func(name: String, gut: bool, text: String):
+		erg.append("%s %s: %s" % ["ok  " if gut else "FEHL", name, text])
+		return gut
+	await _warte(1.0)
+	for g in get_tree().get_nodes_in_group("gegner"):
+		g.free()
+	var s := touch.get_viewport_rect().size
+	# Ereignisse kommen in Bildschirmpunkten an, die Knöpfe liegen in der (am Handy 1,4× skalierten) Fläche
+	var f := float(DisplayServer.window_get_size().x) / s.x
+	var beruehre := func(i: int, p: Vector2, an: bool):
+		var e := InputEventScreenTouch.new()
+		e.index = i
+		e.position = p * f
+		e.pressed = an
+		Input.parse_input_event(e)
+	var ziehe := func(i: int, p: Vector2, rel: Vector2):
+		var e := InputEventScreenDrag.new()
+		e.index = i
+		e.position = p * f
+		e.relative = rel * f
+		Input.parse_input_event(e)
+	await _warte(0.2)
+	erg.append("Fläche %s, Faktor Bildschirm/Fläche %.2f" % [s, f])
+	ok = pruef.call("Sichtbar", touch.visible and not Input.emulate_mouse_from_touch, "Ebene %s, Maus aus Berührung %s (soll aus)" % [touch.visible, Input.emulate_mouse_from_touch]) and ok
+	# Stick: Daumen links unten, 110 nach oben gezogen → volle Fahrt vorwärts
+	var st := Vector2(220, s.y - 220)
+	beruehre.call(0, st, true)
+	ziehe.call(0, st + Vector2(0, -110), Vector2(0, -110))
+	await _warte(0.05)
+	var vor := Input.get_action_strength("vor")
+	var p0 := schiff.global_position
+	# zweiter Finger gleichzeitig: Feuer halten
+	var feuer_k: Dictionary = touch._knoepfe.filter(func(k): return k.aktion == "feuer")[0]
+	var schuesse0 := get_tree().get_nodes_in_group("spieler_geschoss").size()
+	beruehre.call(1, feuer_k.mitte, true)
+	await _warte(0.5)
+	_foto("touch_flug")
+	var feuer := Input.is_action_pressed("feuer")
+	var schuesse1 := get_tree().get_nodes_in_group("spieler_geschoss").size()
+	var weg := schiff.global_position.distance_to(p0)
+	ok = pruef.call("Stick", vor > 0.95 and weg > 1.0, "vor %.2f, in 0,5 s %.1f m geflogen" % [vor, weg]) and ok
+	ok = pruef.call("Feuer halten (mit Stick zugleich)", feuer and schuesse1 > schuesse0,
+		"feuer gedrückt %s, eigene Geschosse %d → %d" % [feuer, schuesse0, schuesse1]) and ok
+	beruehre.call(1, feuer_k.mitte, false)
+	beruehre.call(0, st + Vector2(0, -110), false)
+	await _warte(0.05)
+	ok = pruef.call("Loslassen", not Input.is_action_pressed("feuer") and Input.get_action_strength("vor") == 0.0,
+		"feuer %s, vor %.2f" % [Input.is_action_pressed("feuer"), Input.get_action_strength("vor")]) and ok
+	# Wischen rechts: 300 nach rechts → Schiff dreht nach rechts
+	var blick0 := -schiff.global_basis.z
+	var bp := Vector2(s.x * 0.6, s.y * 0.45)
+	beruehre.call(2, bp, true)
+	for i in 6:
+		ziehe.call(2, bp + Vector2(50 * (i + 1), 0), Vector2(50, 0))
+		await _warte(0.02)
+	beruehre.call(2, bp + Vector2(300, 0), false)
+	await _warte(0.1)
+	var blick1 := -schiff.global_basis.z
+	var winkel := rad_to_deg(blick0.signed_angle_to(blick1, schiff.global_basis.y))
+	ok = pruef.call("Wischen dreht", winkel < -20.0, "300 Bildpunkte nach rechts → %.0f° (negativ = rechts)" % winkel) and ok
+	# Knopf hoch und Rollen
+	for a in ["hoch", "rollen_links"]:
+		var k: Dictionary = touch._knoepfe.filter(func(x): return x.aktion == a)[0]
+		beruehre.call(3, k.mitte, true)
+		await _warte(0.05)
+		var gedr := Input.is_action_pressed(a)
+		beruehre.call(3, k.mitte, false)
+		ok = pruef.call("Knopf " + a, gedr, "gedrückt %s" % gedr) and ok
+	# Waffenwechsel über die Leiste (läuft über _unhandled_input im Schiff)
+	var laser0: String = schiff.laser_wahl
+	var lw: Dictionary = touch._knoepfe.filter(func(x): return x.aktion == "laser_weiter")[0]
+	beruehre.call(4, lw.mitte, true)
+	await _warte(0.05)
+	beruehre.call(4, lw.mitte, false)
+	erg.append("Laserwechsel: %s → %s" % [laser0, schiff.laser_wahl])
+	# Pause-Knopf: pausiert, Ebene weg, Maus aus Berührung wieder an (Menü per Tipp)
+	var pk: Dictionary = touch._knoepfe.filter(func(x): return x.aktion == "pause")[0]
+	var autotest_merken := autotest
+	autotest = false             # die Pause greift sonst im Autotest nicht
+	beruehre.call(5, pk.mitte, true)
+	await _warte(0.1)
+	beruehre.call(5, pk.mitte, false)
+	await _warte(0.1)
+	var pausiert := get_tree().paused
+	_foto("touch_pause")
+	ok = pruef.call("Pause-Knopf", pausiert and not touch.visible and Input.emulate_mouse_from_touch,
+		"pausiert %s, Ebene %s, Maus aus Berührung %s" % [pausiert, touch.visible, Input.emulate_mouse_from_touch]) and ok
+	_pause(false)
+	autotest = autotest_merken
+	await _warte(0.1)
+	# Controller benutzt → ausgeblendet; Berührung → wieder da
+	await _knopf_druck(JOY_BUTTON_Y)
+	var weg_bei_pad := not touch.visible
+	beruehre.call(6, Vector2(s.x * 0.6, s.y * 0.3), true)
+	await _warte(0.05)
+	beruehre.call(6, Vector2(s.x * 0.6, s.y * 0.3), false)
+	await _warte(0.05)
+	ok = pruef.call("Controller blendet aus", weg_bei_pad and touch.visible, "nach Y weg %s, nach Berührung wieder da %s" % [weg_bei_pad, touch.visible]) and ok
+	for e in erg:
+		Protokoll.schreib("test", "Touch: " + e)
+	Protokoll.schreib("test", "TOUCH-TEST %s" % ("BESTANDEN" if ok else "FEHLGESCHLAGEN"))
+
+
+## Controller-Belegung (Stev 2026-10-11): über die Optionen umbelegen, Tausch, Speichern/Laden, Standard.
+func _pad_test() -> void:
+	var erg: Array[String] = []
+	var ok := true
+	var pruef := func(name: String, gut: bool, text: String):
+		erg.append("%s %s: %s" % ["ok  " if gut else "FEHL", name, text])
+		return gut
+	Eingabe.zuruecksetzen_pad()
+	ok = pruef.call("Standard-Anzeige", Eingabe.pad_text("feuer") == "RT" and Eingabe.pad_text("licht") == "Y" and Eingabe.pad_text("leitstrahl") == "—",
+		"Laser „%s“, Scheinwerfer „%s“, Leitstrahl „%s“" % [Eingabe.pad_text("feuer"), Eingabe.pad_text("licht"), Eingabe.pad_text("leitstrahl")]) and ok
+	_zeige_hangar()
+	await _warte(0.3)
+	_optionen_auf()
+	await _warte(0.4)
+	var knopf: Button = optionen.find_child("Pad_licht", true, false)
+	ok = pruef.call("Abschnitt sichtbar", knopf != null and knopf.is_visible_in_tree(), "Knopf Scheinwerfer %s" % ("da" if knopf else "fehlt")) and ok
+	# Scheinwerfer über die Optionen auf X: Knopf drücken (A), dann X am Controller
+	knopf.grab_focus()
+	await _warte(0.1)
+	await _knopf_druck(JOY_BUTTON_A)
+	var wartet := knopf.text
+	await _knopf_druck(JOY_BUTTON_X)
+	await _warte(0.1)
+	ok = pruef.call("Umbelegen", wartet.begins_with("Knopf drücken") and Eingabe.pad_text("licht") == "X" and Eingabe.pad_text("nachbrenner") == "Y",
+		"wartete „%s“, Scheinwerfer „%s“, Nachbrenner (hatte X) „%s“" % [wartet, Eingabe.pad_text("licht"), Eingabe.pad_text("nachbrenner")]) and ok
+	var x := InputEventJoypadButton.new()
+	x.button_index = JOY_BUTTON_X
+	ok = pruef.call("Wirkung", InputMap.event_is_action(x, "licht") and not InputMap.event_is_action(x, "nachbrenner"), "X löst Scheinwerfer aus") and ok
+	# B belegen (sonst Zurück) und Optionen bleiben offen
+	var leit: Button = optionen.find_child("Pad_leitstrahl", true, false)
+	leit.grab_focus()
+	await _knopf_druck(JOY_BUTTON_A)
+	await _knopf_druck(JOY_BUTTON_BACK)
+	await _warte(0.1)
+	ok = pruef.call("Leitstrahl auf Select", Eingabe.pad_text("leitstrahl") == "Select" and optionen.visible, "Leitstrahl „%s“, Optionen offen %s" % [Eingabe.pad_text("leitstrahl"), optionen.visible]) and ok
+	# Trigger: Rakete auf RT → Laser bekommt LT
+	Eingabe.belegen_pad("rakete", _trigger(JOY_AXIS_TRIGGER_RIGHT))
+	ok = pruef.call("Trigger tauschen", Eingabe.pad_text("rakete") == "RT" and Eingabe.pad_text("feuer") == "LT", "Rakete „%s“, Laser „%s“" % [Eingabe.pad_text("rakete"), Eingabe.pad_text("feuer")]) and ok
+	# Abbruch nach 5 s ohne Eingabe
+	knopf.grab_focus()
+	await _knopf_druck(JOY_BUTTON_A)
+	await _warte(Optionen.PAD_WARTEN + 0.3)
+	ok = pruef.call("Abbruch nach Wartezeit", optionen._wartet_pad == "" and Eingabe.pad_text("licht") == "X", "wartet noch „%s“, Scheinwerfer „%s“" % [optionen._wartet_pad, Eingabe.pad_text("licht")]) and ok
+	_foto("optionen_controller")
+	# Speichern und Laden
+	for a in Eingabe._standard_pad:
+		Eingabe._setze_pad(a, Eingabe._standard_pad[a])
+	Eingabe.laden()
+	ok = pruef.call("Gespeichert", Eingabe.pad_text("licht") == "X" and Eingabe.pad_text("rakete") == "RT" and Eingabe.pad_text("leitstrahl") == "Select",
+		"nach Laden Scheinwerfer „%s“, Rakete „%s“, Leitstrahl „%s“" % [Eingabe.pad_text("licht"), Eingabe.pad_text("rakete"), Eingabe.pad_text("leitstrahl")]) and ok
+	_optionen_zu()
+	await _warte(0.3)
+	var hilfe := ""
+	for l in hangar.find_children("*", "Label", true, false):
+		if l.text.contains("Controller:"):
+			hilfe = l.text
+	ok = pruef.call("Hilfetext", "RT Rakete" in hilfe and "LT Laser" in hilfe, hilfe.get_slice("Controller:", 1).left(120)) and ok
+	_optionen_auf()
+	await _warte(0.3)
+	(optionen.find_child("PadStandard", true, false) as Button).pressed.emit()
+	ok = pruef.call("Standard", Eingabe.pad_text("licht") == "Y" and Eingabe.pad_text("feuer") == "RT" and Eingabe.pad_text("leitstrahl") == "—",
+		"Scheinwerfer „%s“, Laser „%s“, Leitstrahl „%s“" % [Eingabe.pad_text("licht"), Eingabe.pad_text("feuer"), Eingabe.pad_text("leitstrahl")]) and ok
+	_optionen_zu()
+	for e in erg:
+		Protokoll.schreib("test", "Controller-Belegung: " + e)
+	Protokoll.schreib("test", "PAD-TEST %s" % ("BESTANDEN" if ok else "FEHLGESCHLAGEN"))
+
+
+func _trigger(achse: JoyAxis) -> InputEventJoypadMotion:
+	var e := InputEventJoypadMotion.new()
+	e.axis = achse
+	e.axis_value = 1.0
+	return e
+
+
 ## Gegner-Einführung (Stev 2026-10-11): je Tiefe 1–25 zwölf Minen besetzen und zählen, wer vorkommt.
 func _besetzung_test() -> void:
 	var ok := true
