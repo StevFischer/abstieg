@@ -5,3 +5,5 @@ build/web/
 build/linux/
 build/windows/
 build/hf-space/
+build/*.apk
+build/*.idsig
