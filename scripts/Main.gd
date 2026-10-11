@@ -1880,17 +1880,33 @@ func _touch_test() -> void:
 	ok = pruef.call("Loslassen", not Input.is_action_pressed("feuer") and Input.get_action_strength("vor") == 0.0,
 		"feuer %s, vor %.2f" % [Input.is_action_pressed("feuer"), Input.get_action_strength("vor")]) and ok
 	# Wischen rechts: 300 nach rechts → Schiff dreht nach rechts
-	var blick0 := -schiff.global_basis.z
-	var bp := Vector2(s.x * 0.6, s.y * 0.45)
-	beruehre.call(2, bp, true)
-	for i in 6:
-		ziehe.call(2, bp + Vector2(50 * (i + 1), 0), Vector2(50, 0))
-		await _warte(0.02)
-	beruehre.call(2, bp + Vector2(300, 0), false)
-	await _warte(0.1)
-	var blick1 := -schiff.global_basis.z
-	var winkel := rad_to_deg(blick0.signed_angle_to(blick1, schiff.global_basis.y))
+	var wisch := func() -> float:
+		var blick0 := -schiff.global_basis.z
+		var bp := Vector2(s.x * 0.6, s.y * 0.45)
+		beruehre.call(2, bp, true)
+		for i in 6:
+			ziehe.call(2, bp + Vector2(50 * (i + 1), 0), Vector2(50, 0))
+			await _warte(0.02)
+		beruehre.call(2, bp + Vector2(300, 0), false)
+		await _warte(0.1)
+		return rad_to_deg(blick0.signed_angle_to(-schiff.global_basis.z, schiff.global_basis.y))
+	Eingabe.touch_empfindlichkeit = 1.0
+	var winkel: float = await wisch.call()
 	ok = pruef.call("Wischen dreht", winkel < -20.0, "300 Bildpunkte nach rechts → %.0f° (negativ = rechts)" % winkel) and ok
+	# Empfindlichkeit über den Regler in den Optionen auf 200 % → derselbe Wisch dreht doppelt so weit
+	optionen.aufbauen()
+	var regler: HSlider = optionen.find_child("TouchEmpfindlichkeit", true, false)
+	if regler:
+		regler.value = 200
+	Eingabe.speichern()
+	var winkel2: float = await wisch.call()
+	ok = pruef.call("Regler Empfindlichkeit", regler != null and absf(winkel2 / winkel - 2.0) < 0.15,
+		"Regler %s, 100 %% → %.0f°, 200 %% → %.0f° (×%.2f, soll 2)" % ["da" if regler else "fehlt", winkel, winkel2, winkel2 / winkel]) and ok
+	Eingabe.touch_empfindlichkeit = 1.0
+	Eingabe.laden()
+	ok = pruef.call("Empfindlichkeit gespeichert", is_equal_approx(Eingabe.touch_empfindlichkeit, 2.0), "nach Laden %.2f" % Eingabe.touch_empfindlichkeit) and ok
+	Eingabe.touch_empfindlichkeit = 1.0
+	Eingabe.speichern()
 	# Knopf hoch und Rollen
 	for a in ["hoch", "rollen_links"]:
 		var k: Dictionary = touch._knoepfe.filter(func(x): return x.aktion == a)[0]

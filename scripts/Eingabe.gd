@@ -22,6 +22,7 @@ const PAD_BELEGBAR := [
 	["laser_weiter", "Nächster Laser"], ["laser_zurueck", "Voriger Laser"], ["rakete_weiter", "Nächste Rakete"],
 ]
 var _standard := {}          ## Aktion -> Liste der PC-Ereignisse ab Werk
+var touch_empfindlichkeit := 1.0   ## Faktor auf die Drehung beim Wischen (Optionen-Regler, 0,25–3,0; Stev 2026-10-11)
 var _standard_pad := {}      ## Aktion -> Liste der Controller-Ereignisse (Knöpfe, Trigger) ab Werk
 var _datei := "user://abstieg_tasten.cfg"
 const FASSUNG := 2           ## 2: Leitstrahl ab Werk unbelegt (2026-10-11)
@@ -206,6 +207,7 @@ func speichern() -> void:
 		for e in pad_ereignisse(b[0]):
 			liste.append(("knopf:%d" % e.button_index) if e is InputEventJoypadButton else ("achse:%d" % e.axis))
 		c.set_value("controller", b[0], liste)
+	c.set_value("touch", "empfindlichkeit", touch_empfindlichkeit)
 	c.set_value("stand", "fassung", FASSUNG)
 	c.save(_datei)
 
@@ -214,6 +216,7 @@ func laden() -> void:
 	var c := ConfigFile.new()
 	if c.load(_datei) != OK:
 		return
+	touch_empfindlichkeit = clampf(float(c.get_value("touch", "empfindlichkeit", 1.0)), 0.25, 3.0)
 	var fassung: int = c.get_value("stand", "fassung", 1)
 	for b in BELEGBAR:
 		var liste: Array = c.get_value("tasten", b[0], [])

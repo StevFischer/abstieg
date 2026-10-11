@@ -83,6 +83,8 @@ func aufbauen() -> void:
 			erster = regler
 	if not OS.has_feature("android"):
 		_tasten_liste(spalte)
+	if Touch.verfuegbar():
+		_touch_regler(spalte)
 	_pad_liste(spalte)
 	var zur := Button.new()
 	zur.text = "Zurück"
@@ -145,6 +147,36 @@ func _tasten_zeigen() -> void:
 func _warten_auf(aktion: String) -> void:
 	_wartet = aktion
 	_tasten_zeigen()
+
+
+## Touch-Empfindlichkeit (Stev 2026-10-11): wie schnell Wischen auf der rechten Seite dreht. Gespeichert sofort.
+func _touch_regler(spalte: VBoxContainer) -> void:
+	spalte.add_child(_text("TOUCH", 22, ORANGE))
+	var zeile := HBoxContainer.new()
+	zeile.add_theme_constant_override("separation", 20)
+	var name_l := _text("Empfindlichkeit", 24, Color(0.9, 0.88, 0.8))
+	name_l.custom_minimum_size = Vector2(300, 0)
+	zeile.add_child(name_l)
+	var regler := HSlider.new()
+	regler.name = "TouchEmpfindlichkeit"
+	regler.min_value = 25
+	regler.max_value = 300
+	regler.step = 5
+	regler.value = round(Eingabe.touch_empfindlichkeit * 100.0)
+	regler.custom_minimum_size = Vector2(420, 36)
+	regler.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	zeile.add_child(regler)
+	var wert := _text("%d %%" % int(regler.value), 24, Color(1.0, 0.85, 0.35))
+	wert.custom_minimum_size = Vector2(90, 0)
+	wert.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	zeile.add_child(wert)
+	regler.value_changed.connect(func(v: float):
+		Eingabe.touch_empfindlichkeit = v / 100.0
+		wert.text = "%d %%" % int(v))
+	regler.drag_ended.connect(func(_geaendert: bool): Eingabe.speichern())
+	spalte.add_child(zeile)
+	spalte.add_child(_text("Wie schnell das Schiff beim Wischen auf der rechten Bildseite dreht. 100 % ist der Ausgangswert.", 16,
+		Color(0.6, 0.58, 0.52)))
 
 
 ## Controller (Stev 2026-10-11): je Aktion ein Knopf; drücken, dann den neuen Knopf oder Trigger am Controller.
@@ -263,6 +295,7 @@ func _unhandled_input(e: InputEvent) -> void:
 
 func _schliessen() -> void:
 	Klang.speichern()
+	Eingabe.speichern()          # Touch-Regler auch per Steuerkreuz verstellt (dann gibt es kein drag_ended)
 	zurueck.emit()
 
 

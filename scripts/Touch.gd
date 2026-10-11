@@ -7,7 +7,7 @@ extends Control
 
 const STICK_RADIUS := 110.0        ## so weit (Fläche, nicht Pixel) muss der Daumen für volle Fahrt ziehen
 const STICK_TOT := 0.12            ## Totzone des Sticks
-const DREH := 1.2                  ## Ziehen rechts: Faktor auf die Mausdrehung (Schiff.MAUS je Bildpunkt)
+const DREH := 1.2                  ## Ziehen rechts: Faktor auf die Mausdrehung (Schiff.MAUS je Bildpunkt), mal Optionen-Regler
 const FARBE := Color(1.0, 0.82, 0.3)
 
 var main: Node                     ## Main.gd: zustand, schiff
@@ -27,8 +27,13 @@ func _init() -> void:
 
 
 func _ready() -> void:
-	an = DisplayServer.is_touchscreen_available() or "--touch" in OS.get_cmdline_user_args()
+	an = verfuegbar()
 	Protokoll.schreib("start", "Touch-Steuerung %s (Touchschirm %s)" % ["an" if an else "aus", DisplayServer.is_touchscreen_available()])
+
+
+## Gerät mit Touchschirm (Handy, Tablet, auch im Browser) oder am PC mit --touch nachgestellt
+static func verfuegbar() -> bool:
+	return DisplayServer.is_touchscreen_available() or "--touch" in OS.get_cmdline_user_args()
 
 
 func aktiv() -> bool:
@@ -105,7 +110,7 @@ func _input(e: InputEvent) -> void:
 				var v: Vector2 = (e.position - _stick_mitte) / STICK_RADIUS
 				_stick_setzen(v.limit_length(1.0))
 			"blick":
-				main.schiff.touch_drehen(e.relative * DREH)
+				main.schiff.touch_drehen(e.relative * DREH * Eingabe.touch_empfindlichkeit)
 			"knopf":
 				# vom Knopf gerutscht: loslassen (sonst klemmt z. B. der Laser)
 				if e.position.distance_to(f.knopf.mitte) > f.knopf.radius * 1.6:
