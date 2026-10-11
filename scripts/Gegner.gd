@@ -128,6 +128,21 @@ static var schild_kegel := 0.82     ## ±35° (Stev: „seitlich auch treffbar�
 
 static var _modelle := {}
 static var _platten: ImageTexture
+## Gegner-KI (Stev 2026-10-11, alle vier gewählt). Schalter für Vorher/Nachher-Messungen im --ki-test.
+static var KI := {"weg": true, "schwarm": true, "vorhalt": true, "rueckzug": true}
+static var fluss := {}               ## Flussfeld: Zelle → Schritte bis zum Schiff (Main setzt es je Zellwechsel)
+static var fluss_gen: LevelGen
+const WEG_MAX := 16                  ## so viele Zellen Weg folgen sie dir ohne Sicht (weiter weg: verlieren die Spur)
+const VORHALT_AB := 5                ## Tiefe 1–4 kein Vorhalt …
+const VORHALT_VOLL := 15             ## … bis hier steigend auf VORHALT_MAX
+const VORHALT_MAX := 0.7
+const TRENN_WEITE := 4.5             ## Ausschwärmen: näher als das drücken sich Gegner auseinander
+const RUECKZUG_BEI := 0.25           ## Rückzug unter 25 % Leben …
+const RUECKZUG_BIS := 0.6            ## … bis wieder 60 % (Reparierer) oder RUECKZUG_DAUER ohne Sicht
+const RUECKZUG_DAUER := 5.0
+const RUECKZUG_TEMPO := 1.8          ## beim Rückzug schneller als sonst, sonst bleibt ein Wächter (4,5 m/s) ewig in Sicht
+const KEIN_RUECKZUG := ["kamikaze", "drohne", "splitterteil", "nest", "dieb", "reparierer", "geschuetz", "lauerer"]
+static var rueckzuege := 0           ## für Test und Log
 static var rufe := 0            ## wie oft Verstärkung gerufen wurde (für Test und Log)
 static var ausweicher := 0      ## wie oft ein Gegner einem Schuss ausgewichen ist
 
@@ -185,6 +200,16 @@ var _ramm_dir := Vector3.ZERO
 var _zielpunkt := Vector3.ZERO
 var _an_wand := false
 var _geheilt := 0.0
+var _stufe := 1
+var _platz := 0.0               ## Ausschwärmen: eigener Winkel um das Schiff (rad)
+var _kreis := 1.0               ## Kreisen: Richtung, wechselt alle paar Sekunden und bei Treffern
+var _kreis_t := 0.0
+var _trenn := Vector3.ZERO      ## Abstoßung von Nachbarn, alle 0,2 s neu
+var _trenn_t := 0.0
+var _rueckzug := false
+var _rueckzug_t := 0.0
+var _zurueckgezogen := false
+var rueck_ziel := Vector3.INF   ## Rückzug: angesteuerter Punkt (für die Testspur)    ## nur einmal je Leben, außer ein Reparierer hat ihn wieder aufgefüllt
 
 
 func einrichten(p_typ: String, stufe: int) -> void:
@@ -203,6 +228,10 @@ func einrichten(p_typ: String, stufe: int) -> void:
 	_auge = d.auge
 	_zeit = randf() * 10.0
 	_flanke = randf_range(-1.2, 1.2)
+	_stufe = stufe
+	_platz = randf_range(-0.9, 0.9)
+	_kreis = 1.0 if randf() < 0.5 else -1.0
+	_kreis_t = randf_range(2.0, 4.0)
 	motion_mode = CharacterBody3D.MOTION_MODE_FLOATING
 	collision_layer = 4
 	collision_mask = 1 | 2 | 4
@@ -351,6 +380,11 @@ func _physics_process(dt: float) -> void:
 			_alarm = true                 # gehört, nicht gesehen: fliegt hin, schießt erst bei Sicht
 			_letzte = ziel.global_position
 			_rufen()
+		# Ohne Sicht dem Flussfeld folgen statt geradeaus gegen die Wand (Bosse haben ihre eigene Jagd)
+		if not _sicht and _alarm and KI.weg and tempo > 0.0 and not ist_boss:
+			var wp := _wegpunkt()
+			if wp != Vector3.INF:
+				_letzte = wp
 	if _sicht:
 		if not _alarm:
 			_alarm = true
@@ -365,6 +399,11 @@ func _physics_process(dt: float) -> void:
 			move_and_slide()
 			return
 		_jagd_ende()
+	if _alarm and KI.rueckzug and _rueckzug_pruefen(dt):
+		_drehen_zu(global_position + velocity, dt)
+		velocity = velocity.lerp(_rueckzug_v(zum, dist), 1.0 - exp(-3.0 * dt))
+		move_and_slide()
+		return
 	if _alarm:
 		match typ:
 			"minenleger": soll_v = _verhalten_minenleger(zum, dist, dt)
@@ -452,14 +491,132 @@ func _verfolgen(zum: Vector3, dist: float) -> Vector3:
 		var w := _letzte - global_position
 		return w.normalized() * tempo if w.length() > 2.0 else Vector3.ZERO
 	var soll_pos := ziel.global_position - zum / maxf(dist, 0.01) * abstand
+	var von_ziel := (global_position - ziel.global_position).normalized()
 	if typ in FLANKE:
-		var von_ziel := (global_position - ziel.global_position).normalized()
 		soll_pos = ziel.global_position + von_ziel.rotated(Vector3.UP, _flanke) * abstand
+	elif KI.schwarm and typ not in AN_WAND:       # der Lauerer springt aus dem Hinterhalt direkt an
+		# Ausschwärmen: jeder hat seinen eigenen Platz auf dem Kreis um das Schiff (±50°), statt dass alle
+		# denselben Punkt anfliegen. Ist der Platz hinter einer Wand, bleibt es beim direkten Punkt.
+		var platz := ziel.global_position + von_ziel.rotated(Vector3.UP, _platz) * abstand
+		if _frei_von(ziel.global_position, platz):
+			soll_pos = platz
 	var w := soll_pos - global_position
 	var v := w.normalized() * tempo if w.length() > 1.5 else Vector3.ZERO
 	if typ in FLANKE:
 		v += global_basis.x * sin(_zeit * 1.3) * tempo * 0.4
+	elif KI.schwarm and typ not in AN_WAND and w.length() < 4.0:
+		# Kreisen: am Platz angekommen seitlich weiter statt stillzustehen; Richtung wechselt alle 2–4 s
+		_kreis_t -= get_physics_process_delta_time()
+		# an eine Wand gestoßen: gleich umdrehen statt bis zum nächsten Wechsel dagegen zu drücken
+		if _kreis_t <= 0.0 or (get_slide_collision_count() > 0 and _kreis_t < 1.5):
+			_kreis = -_kreis
+			_kreis_t = randf_range(2.0, 4.0)
+		v += global_basis.x * _kreis * tempo * 0.6
+	if KI.schwarm:
+		v += _trennung() * tempo
 	return v
+
+
+## Abstoßung von Gegnern näher als TRENN_WEITE (alle 0,2 s neu, sonst wäre es n² je Bild).
+func _trennung() -> Vector3:
+	_trenn_t -= get_physics_process_delta_time()
+	if _trenn_t > 0.0:
+		return _trenn
+	_trenn_t = 0.2
+	_trenn = Vector3.ZERO
+	for g in get_tree().get_nodes_in_group("gegner"):
+		if g == self or g.ist_boss:
+			continue
+		var weg: Vector3 = global_position - g.global_position
+		var d := weg.length()
+		if d < TRENN_WEITE and d > 0.01:
+			_trenn += weg / d * (1.0 - d / TRENN_WEITE)
+	_trenn = _trenn.limit_length(1.0)
+	return _trenn
+
+
+## Nächster Zellmittelpunkt Richtung Schiff laut Flussfeld; INF, wenn das Schiff zu weit weg ist.
+func _wegpunkt() -> Vector3:
+	if fluss.is_empty() or fluss_gen == null:
+		return Vector3.INF
+	var c := fluss_gen.naechste_zelle(global_position)
+	if not fluss.has(c) or int(fluss[c]) > WEG_MAX:
+		return Vector3.INF
+	if int(fluss[c]) == 0:
+		return ziel.global_position
+	var beste := c
+	for r in LevelGen.RICHTUNGEN:
+		var n: Vector3i = c + r
+		if fluss.has(n) and int(fluss[n]) < int(fluss[beste]):
+			beste = n
+	# eine Zelle weiter vorausschauen, wenn frei sichtbar: glattere Kurven
+	for r in LevelGen.RICHTUNGEN:
+		var n: Vector3i = beste + r
+		if fluss.has(n) and int(fluss[n]) < int(fluss[beste]) and _frei(LevelGen.welt_von(n)):
+			return LevelGen.welt_von(n)
+	return LevelGen.welt_von(beste)
+
+
+func _frei_von(von: Vector3, nach: Vector3) -> bool:
+	var q := PhysicsRayQueryParameters3D.create(von, nach, 1)
+	return get_world_3d().direct_space_state.intersect_ray(q).is_empty()
+
+
+## Rückzug: unter RUECKZUG_BEI Leben aus der Sicht des Schiffs, zu einem Reparierer, falls einer in 60 m ist.
+## Vorbei bei RUECKZUG_BIS Leben oder nach RUECKZUG_DAUER ohne Sicht; danach greift er wieder an.
+func _rueckzug_pruefen(dt: float) -> bool:
+	if ist_boss or tempo <= 0.0 or typ in KEIN_RUECKZUG or _modus != "":
+		return false
+	if not _rueckzug:
+		if _zurueckgezogen or hp >= hp_max * RUECKZUG_BEI:
+			return false
+		_rueckzug = true
+		_zurueckgezogen = true
+		_rueckzug_t = 0.0
+		rueckzuege += 1
+		Protokoll.schreib("gegner", "%s zieht sich zurück (Leben %.0f/%.0f)" % [typ, hp, hp_max])
+		return true
+	_rueckzug_t = 0.0 if _sicht else _rueckzug_t + dt
+	if hp >= hp_max * RUECKZUG_BIS:
+		_zurueckgezogen = false          # aufgefüllt: darf sich später noch einmal zurückziehen
+		_rueckzug = false
+	elif _rueckzug_t > RUECKZUG_DAUER:
+		_rueckzug = false
+	return _rueckzug
+
+
+func _rueckzug_v(zum: Vector3, dist: float) -> Vector3:
+	for g in get_tree().get_nodes_in_group("gegner"):
+		if g.typ == "reparierer" and not g._tot and g.global_position.distance_to(global_position) < 60.0:
+			var w: Vector3 = g.global_position - global_position
+			return w.normalized() * tempo * RUECKZUG_TEMPO if w.length() > 5.0 else Vector3.ZERO
+	# Kein Reparierer: im Flussfeld bergauf, also weg vom Schiff um die nächste Ecke
+	if not fluss.is_empty() and fluss_gen != null:
+		var c := fluss_gen.naechste_zelle(global_position)
+		if fluss.has(c):
+			# Nachbarzelle weiter weg vom Schiff; bevorzugt eine, die das Schiff nicht sieht (um die Ecke)
+			var beste := c
+			var beste_wert := -1.0
+			for r in LevelGen.RICHTUNGEN:
+				var n: Vector3i = c + r
+				# nur echte Fortschritte weg vom Schiff (gleich weit hieße: zwischen zwei Zellen pendeln)
+				if fluss.has(n) and int(fluss[n]) > int(fluss[c]):
+					var p := LevelGen.welt_von(n)
+					var wert := 1.0 + (2.0 if not _frei_von(ziel.global_position, p) else 0.0)
+					if wert > beste_wert:
+						beste_wert = wert
+						beste = n
+			if beste != c:
+				rueck_ziel = LevelGen.welt_von(beste)
+				return (rueck_ziel - global_position).normalized() * tempo * RUECKZUG_TEMPO
+			# Sackgasse (keine Zelle weiter weg vom Schiff): in die Enge getrieben, kein Rückzug, er kämpft weiter.
+			# Vorher drückte „einfach weg vom Schiff“ ihn in die Raumecke, wo er festsaß.
+			_rueckzug = false
+			rueck_ziel = Vector3.INF
+			Protokoll.schreib("gegner", "%s in die Enge getrieben, kämpft weiter" % typ)
+			return Vector3.ZERO
+	rueck_ziel = Vector3.INF
+	return -zum / maxf(dist, 0.01) * tempo * RUECKZUG_TEMPO
 
 
 func _ausweichen() -> void:
@@ -503,6 +660,8 @@ func _verhalten_minenleger(zum: Vector3, dist: float, dt: float) -> Vector3:
 ## Stürzt sich ohne zu bremsen auf das Schiff und explodiert in der Nähe.
 func _verhalten_kamikaze(zum: Vector3, dist: float, dt: float) -> Vector3:
 	var hin := ziel.global_position if _sicht else _letzte
+	if _sicht and dist > 3.0:
+		hin = _vorhalt_punkt(global_position, tempo)          # schneidet den Weg ab statt hinterherzufliegen
 	_drehen_zu(hin, dt * 2.0)
 	if _sicht and dist < 2.8:
 		_detonieren(5.0)
@@ -653,7 +812,10 @@ func _verhalten_rammbock(zum: Vector3, dist: float, dt: float) -> Vector3:
 				velocity = -_ramm_dir * 3.0
 				return Vector3.ZERO
 			for i in get_slide_collision_count():
-				if not get_slide_collision(i).get_collider() is CharacterBody3D:
+				var k := get_slide_collision(i)
+				# nur Frontalaufprall betäubt; an der Wand entlangschrammen nicht (2026-10-11: stand er nach dem
+				# Ausschwärmen dicht an einer Wand, betäubte er sich beim Losrasen sofort selbst)
+				if not k.get_collider() is CharacterBody3D and k.get_normal().dot(_ramm_dir) < -0.5:
 					_modus = "betaeubt"
 					_phase_t = BETAEUBT
 					velocity = Vector3.ZERO
@@ -942,7 +1104,7 @@ func _schiessen() -> void:
 	if welt == null:
 		return
 	var start := global_position - global_basis.z * 1.4
-	var richtung := (ziel.global_position - start).normalized()
+	var richtung := (_vorhalt_punkt(start, schuss_tempo) - start).normalized()
 	richtung = (richtung + Vector3(randf() - 0.5, randf() - 0.5, randf() - 0.5) * 0.06).normalized()
 	# Stev 2026-10-11: Drohnenschüsse in Augenfarbe sahen aus wie das Raumlicht — gelb
 	var farbe := Color(1.0, 0.85, 0.1) if typ == "drohne" else _auge
@@ -953,6 +1115,27 @@ func _schiessen() -> void:
 	Effekte.ton("laser_gegner", start, -4.0)
 	if typ == "tarn":
 		_enttarnt_t = 2.0      # wer schießt, verrät sich
+
+
+## Vorhalt: Anteil nach Tiefe (1–4 keiner, dann steigend bis VORHALT_MAX ab VORHALT_VOLL).
+static func vorhalt_anteil(stufe: int) -> float:
+	return clampf(float(stufe - VORHALT_AB + 1) / float(VORHALT_VOLL - VORHALT_AB + 1), 0.0, 1.0) * VORHALT_MAX
+
+
+## Wohin zielen, damit ein Geschoss (bzw. der Gegner selbst) mit diesem Tempo das Schiff trifft, wenn es
+## seine Geschwindigkeit hält — nur zum Anteil vorhalt_anteil, der Rest zielt auf die jetzige Stelle.
+func _vorhalt_punkt(von: Vector3, geschw: float) -> Vector3:
+	var p := ziel.global_position
+	if not KI.vorhalt or geschw <= 0.0 or not ziel is CharacterBody3D:
+		return p
+	var a := vorhalt_anteil(_stufe)
+	if a <= 0.0:
+		return p
+	var v: Vector3 = ziel.velocity
+	var t := von.distance_to(p) / geschw
+	for i in 2:                    # zweimal nachrechnen genügt für die Flugzeit zum vorausberechneten Punkt
+		t = von.distance_to(p + v * t) / geschw
+	return p + v * t * a
 
 
 func _mine_legen(pos: Vector3) -> void:
@@ -999,6 +1182,7 @@ func treffer(s: float) -> void:
 		if ziel != null and is_instance_valid(ziel):
 			_rufen()
 	_enttarnt_t = 2.0
+	_kreis_t = 0.0                # getroffen: Richtung wechseln
 	if ziel != null and is_instance_valid(ziel):
 		_letzte = ziel.global_position
 	_blitz.albedo_color = Color(1, 1, 1, 0.75)

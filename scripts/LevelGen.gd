@@ -254,6 +254,29 @@ func pfad(von: Vector3i, nach: Vector3i) -> Array[Vector3i]:
 	return aus
 
 
+## Flussfeld für die Gegner (2026-10-11): Schrittzahl jeder Zelle bis zur Zelle des Schiffs, Breitensuche bis
+## max_schritte. Einmal je Zellwechsel des Schiffs gerechnet statt einer Suche je Gegner.
+func flussfeld(von: Vector3i, max_schritte: int) -> Dictionary:
+	var feld := {}
+	if not zellen.has(von):
+		return feld
+	feld[von] = 0
+	var schlange: Array[Vector3i] = [von]
+	var kopf := 0
+	while kopf < schlange.size():
+		var c := schlange[kopf]
+		kopf += 1
+		var d: int = feld[c]
+		if d >= max_schritte:
+			continue
+		for r in RICHTUNGEN:
+			var n := c + r
+			if zellen.has(n) and not feld.has(n):
+				feld[n] = d + 1
+				schlange.append(n)
+	return feld
+
+
 func erreichbare(von: Vector3i) -> Dictionary:
 	var gesehen := {von: true}
 	var schlange: Array[Vector3i] = [von]
