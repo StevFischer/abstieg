@@ -30,7 +30,8 @@ const TYPEN := {
 		"farbe": Color(0.35, 0.38, 0.5), "auge": Color(0.4, 0.7, 1.0), "erz": 12},
 	"kamikaze": {"hp": 25.0, "schaden": 30.0, "cd": 0.0, "schuss": 0.0, "tempo": 15.0, "abstand": 0.0, "radius": 0.9,
 		"farbe": Color(0.6, 0.1, 0.08), "auge": Color(1.0, 0.15, 0.05), "erz": 6},
-	"drohne": {"hp": 12.0, "schaden": 3.0, "cd": 1.0, "schuss": 18.0, "tempo": 12.0, "abstand": 7.0, "radius": 0.5,
+	# Stev 2026-10-11: Schwarm „zu schnell und zu viele“ — Tempo 12 → 7 (unter dem Jäger mit 9)
+	"drohne": {"hp": 12.0, "schaden": 3.0, "cd": 1.0, "schuss": 18.0, "tempo": 7.0, "abstand": 7.0, "radius": 0.5,
 		"farbe": Color(0.5, 0.5, 0.55), "auge": Color(1.0, 0.3, 0.3), "erz": 2},
 	"teleporter": {"hp": 50.0, "schaden": 8.0, "cd": 0.18, "schuss": 22.0, "tempo": 3.0, "abstand": 12.0, "radius": 1.0,
 		"farbe": Color(0.2, 0.45, 0.5), "auge": Color(0.3, 1.0, 0.9), "erz": 14},
@@ -67,6 +68,33 @@ const TYPEN := {
 		"farbe": Color(0.22, 0.18, 0.35), "auge": Color(0.9, 0.3, 1.0), "erz": 150, "name": "PHANTOM"},
 }
 const BOSSE := ["boss_koloss", "boss_brutmutter", "boss_phantom"]
+## Einführung der Gegnerarten (Stev 2026-10-11: „nicht alle am Anfang, das verwirrt“): je Tiefe höchstens eine
+## neue Art, Boss-Tiefen bringen außer dem Boss nichts Neues (Ausnahme Tiefe 10: Drohnen zur Brutmutter).
+## Auf ihrer Einführungstiefe tritt die Art nur einzeln auf, danach zwei Tiefen selten, ab dann normal.
+## Main._gegner_setzen liest die Tabelle; Einzelgänger (EINZELGAENGER) werden getrennt gesetzt.
+const EINFUEHRUNG := {
+	"jaeger": [1, "JÄGER", "schnell, umkreist dich"],
+	"geschuetz": [1, "GESCHÜTZ", "steht und schießt"],
+	"kamikaze": [2, "KAMIKAZE", "rast heran und explodiert — früh abschießen"],
+	"waechter": [3, "WÄCHTER", "zäh und hart im Nehmen"],
+	"saeger": [4, "SÄGER", "sägt sich fest und prallt ab"],
+	"minenleger": [6, "MINENLEGER", "hält Abstand und legt Minen"],
+	"schildtraeger": [7, "SCHILDTRÄGER", "von vorn geschützt — von der Seite treffen"],
+	"netzwerfer": [8, "NETZWERFER", "sein Netz bremst dich 2 s"],
+	"tarn": [9, "TARNROBOTER", "fast unsichtbar bis 14 m"],
+	"drohne": [10, "DROHNENSCHWARM", "drei Drohnen zusammen"],
+	"lauerer": [11, "LAUERER", "flimmert an der Wand und springt an"],
+	"splitter": [12, "SPLITTER", "schneller Schütze"],
+	"rammbock": [13, "RAMMBOCK", "Front blockt — ausweichen, an der Wand ist er betäubt"],
+	"teleporter": [14, "TELEPORTER", "springt durch den Raum"],
+	"stoerer": [16, "STÖRSENDER", "trifft den Schild doppelt und sperrt das Laden"],
+	"dieb": [17, "DIEB", "stiehlt Erz und flieht"],
+	"greifer": [18, "GREIFER", "Traktorstrahl zieht dich heran"],
+	"reparierer": [19, "REPARIERER", "heilt andere Gegner — zuerst abschießen"],
+	"nest": [21, "SCHWARMNEST", "brütet Drohnen, sitzt an der Wand"],
+	"scharfschuetze": [22, "SCHARFSCHÜTZE", "roter Zielstrahl — seitlich ausweichen"],
+}
+const EINZELGAENGER := ["dieb", "reparierer", "nest"]     ## höchstens 2 je Mine, nicht im Zufallspool
 const WENDIG := ["jaeger", "tarn", "teleporter", "dieb", "splitterteil"]       ## weichen Schüssen aus
 const FLANKE := ["jaeger", "tarn", "drohne", "splitterteil"]                    ## greifen von der Seite an
 const AN_WAND := ["lauerer", "nest"]        ## setzen sich zu Beginn an die nächste Wand
@@ -916,7 +944,9 @@ func _schiessen() -> void:
 	var start := global_position - global_basis.z * 1.4
 	var richtung := (ziel.global_position - start).normalized()
 	richtung = (richtung + Vector3(randf() - 0.5, randf() - 0.5, randf() - 0.5) * 0.06).normalized()
-	var g := Geschoss.neu(start, richtung, schuss_tempo, schaden, false, _auge, 0.0,
+	# Stev 2026-10-11: Drohnenschüsse in Augenfarbe sahen aus wie das Raumlicht — gelb
+	var farbe := Color(1.0, 0.85, 0.1) if typ == "drohne" else _auge
+	var g := Geschoss.neu(start, richtung, schuss_tempo, schaden, false, farbe, 0.0,
 		{"netzwerfer": 2.4, "stoerer": 1.5}.get(typ, 1.0))
 	g.wirkung = {"netzwerfer": "netz", "stoerer": "emp"}.get(typ, "")
 	welt.add_child(g)

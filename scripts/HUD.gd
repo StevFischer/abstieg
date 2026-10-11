@@ -18,6 +18,7 @@ var _tiefe: Label
 var _erz: Label
 var _status: Label
 var _mitteilung: Label
+var _hinweis: Label            ## neuer Gegner dieser Tiefe, kleiner unter dem Fadenkreuz
 var _aufnahme: Label
 var _boss_name: Label
 var _boss_balken: ProgressBar
@@ -73,6 +74,10 @@ func _init() -> void:
 	_mitteilung.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_ecke(_mitteilung, 0.5, 0.5, Vector2(-900, -300), Vector2(900, -80))
 	wurzel.add_child(_mitteilung)
+	_hinweis = _label("", 28, GELB)
+	_hinweis.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_ecke(_hinweis, 0.5, 0.5, Vector2(-700, 110), Vector2(700, 170))
+	wurzel.add_child(_hinweis)
 	_boss_name = _label("", 24, ROT)
 	_boss_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_ecke(_boss_name, 0.5, 0, Vector2(-400, 135), Vector2(400, 165))
@@ -264,6 +269,14 @@ func mitteilung(text: String, dauer := 2.5, farbe := GELB) -> void:
 	tw.tween_property(_mitteilung, "modulate:a", 0.0, 0.8)
 
 
+func hinweis(text: String, dauer := 6.0) -> void:
+	_hinweis.text = text
+	_hinweis.modulate.a = 1.0
+	var tw := create_tween()
+	tw.tween_interval(dauer)
+	tw.tween_property(_hinweis, "modulate:a", 0.0, 0.8)
+
+
 ## Abrechnung nach einer geschafften Tiefe: Posten mit Betrag, unten die Summe.
 func abschluss(tiefe: int, posten: Array, summe: int) -> void:
 	for k in _abschluss.get_children():
@@ -356,7 +369,7 @@ func _zeichnen() -> void:
 		_zeichnung.draw_string(ThemeDB.fallback_font, m + Vector2(-140, 140), notfall,
 			HORIZONTAL_ALIGNMENT_CENTER, 280, 16, BLAU if notfall.ends_with("bereit") else Color(0.6, 0.6, 0.6))
 	if not leit_an:      # Stev 2026-10-10: Markierung „verschwunden“ — sagen, dass sie nur ausgeschaltet ist
-		_zeichnung.draw_string(ThemeDB.fallback_font, m + Vector2(-160, 162), "Leitstrahl aus — %s / Select" % Eingabe.text_fuer("leitstrahl"),
+		_zeichnung.draw_string(ThemeDB.fallback_font, m + Vector2(-160, 162), "Leitstrahl aus" + ((" — " + Eingabe.text_fuer("leitstrahl")) if Eingabe.text_fuer("leitstrahl") != "—" else ""),
 			HORIZONTAL_ALIGNMENT_CENTER, 320, 15, Color(0.6, 0.75, 0.65, 0.8))
 		return
 	var c := Color(0.4, 1.0, 0.6, 0.9)

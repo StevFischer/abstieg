@@ -140,8 +140,9 @@ func aufbauen() -> void:
 		("Maus drehen · %s/%s/%s/%s fliegen · %s/%s hoch/runter · %s/%s rollen · %s Laser · %s Rakete\n" % [
 			E.text_fuer("vor"), E.text_fuer("links"), E.text_fuer("zurueck"), E.text_fuer("rechts"), E.text_fuer("hoch"),
 			E.text_fuer("runter"), E.text_fuer("rollen_links"), E.text_fuer("rollen_rechts"), E.text_fuer("feuer"), E.text_fuer("rakete")]) + \
-		("Waffen %s … %s · %s Nachbrenner · %s Notfallschild · %s Leitstrahl · %s Scheinwerfer · %s Pause · Tasten änderbar unter Optionen\n" % [
-			E.text_fuer("waffe_1"), E.text_fuer("waffe_8"), E.text_fuer("nachbrenner"), E.text_fuer("notfallschild"), E.text_fuer("leitstrahl"), E.text_fuer("licht"), E.text_fuer("pause")])
+		("Waffen %s … %s · %s Nachbrenner · %s Notfallschild%s · %s Scheinwerfer · %s Pause · Tasten änderbar unter Optionen\n" % [
+			E.text_fuer("waffe_1"), E.text_fuer("waffe_8"), E.text_fuer("nachbrenner"), E.text_fuer("notfallschild"),
+			(" · %s Leitstrahl" % E.text_fuer("leitstrahl")) if E.text_fuer("leitstrahl") != "—" else "", E.text_fuer("licht"), E.text_fuer("pause")])
 	spalte.add_child(_label(tastatur +
 		"Controller: linker Stick fliegen · rechter Stick drehen · LB/RB rollen · A/B hoch/runter · RT Laser · LT Rakete · X Nachbrenner · R3 Notfallschild · Steuerkreuz ←→ Laser, ↑↓ Rakete · Hangar: LB/RB Reiter",
 		16, Color(0.6, 0.58, 0.52), true))

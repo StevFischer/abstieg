@@ -23,6 +23,8 @@ var level_erz := 0
 var lauf_erz := 0
 var countdown := -1.0
 var leitstrahl := true
+var neuer_gegner := ""         ## Hinweis auf die Art, die diese Tiefe einführt (HUD.hinweis unter dem Fadenkreuz)
+var schwarm_je_raum := {}      ## Raum → Zahl der Drohnenschwärme der zuletzt besetzten Mine (für --besetzung-test)
 var autotest := false
 const HANDY_SKALA := 1.4
 var _leit_t := 0.0
@@ -232,6 +234,8 @@ func _lade_level() -> void:
 		tiefe, saat, thema.name, gen.raeume.size(), gen.zellen.size(), gegner_zahl, gen.fluchtzeit(), t])
 	hud.setze_tiefe(tiefe, thema.name)
 	hud.mitteilung("TIEFE %d\n%s" % [tiefe, thema.name])
+	if neuer_gegner != "":
+		hud.hinweis(neuer_gegner)
 	hud.status("Ziel: Reaktor zerstören")
 	if OS.has_feature("web") or "--aufwaermen" in OS.get_cmdline_user_args():
 		_aufwaermen()
@@ -247,60 +251,93 @@ func horde_anzahl(n: int) -> int:
 
 func _gegner_setzen() -> int:
 	var zahl := 0
-	# Wer ab welcher Tiefe dazukommt. Dieb und Reparierer sind Einzelgänger (höchstens 2 je Mine).
+	# Besetzung dieser Mine aus Gegner.EINFUEHRUNG (Stev 2026-10-11: „nicht alle am Anfang, das verwirrt“):
+	# Grundbesetzung Jäger und Geschütz; die Art dieser Tiefe nur einzeln in eigenen Räumen; frisch eingeführte
+	# (bis 2 Tiefen danach) immer dabei, aber selten; von den älteren nur eine Auswahl, damit jede Mine
+	# eine überschaubare Besetzung hat statt aller Arten auf einmal.
 	var pool := ["jaeger", "jaeger", "geschuetz"]
-	if tiefe >= 2:
-		pool.append("kamikaze")
-	if tiefe >= 3:
-		pool.append("waechter")
-	if tiefe >= 4:
-		pool.append("schildtraeger")
-	if tiefe >= 5:
-		pool.append("minenleger")
-	if tiefe >= 6:
-		pool.append_array(["waechter", "jaeger", "kamikaze"])
-	if tiefe >= 8:
-		pool.append_array(["tarn", "tarn"])
-	if tiefe >= 9:
-		pool.append_array(["teleporter", "schildtraeger"])
-	# Neue Arten 2026-10-10, gestaffelt
-	var neue_ab := {2: ["saeger"], 3: ["netzwerfer"], 4: ["splitter"], 5: ["lauerer", "lauerer"], 6: ["rammbock", "saeger"],
-			7: ["stoerer"], 8: ["greifer"], 9: ["scharfschuetze"]}
-	for ab in neue_ab:
-		if tiefe >= ab:
-			pool.append_array(neue_ab[ab])
+	var debuet := ""
+	neuer_gegner = ""
+	var frisch: Array = []
+	var alt: Array = []
+	for typ in Gegner.EINFUEHRUNG:
+		var ab: int = Gegner.EINFUEHRUNG[typ][0]
+		if ab == 1 or tiefe < ab:
+			continue
+		if ab == tiefe:
+			debuet = typ
+		elif typ in Gegner.EINZELGAENGER or typ == "drohne":
+			continue
+		elif tiefe - ab <= 2:
+			frisch.append(typ)
+		else:
+			alt.append(typ)
+	for k in range(alt.size() - 1, 0, -1):          # mischen mit der Level-Saat, damit gleiche Saat = gleiche Mine
+		var j := _rng.randi_range(0, k)
+		var t = alt[k]
+		alt[k] = alt[j]
+		alt[j] = t
+	var besetzung: Array = frisch + alt.slice(0, maxi(0, mini(2 + tiefe / 5, 5) - frisch.size()))
+	for typ in besetzung:
+		pool.append_array([typ] if typ in frisch else [typ, typ])
+	# Räume für die neue Art: sie steht dort allein, damit man sie kennenlernt (Schwarm und Einzelgänger: ein Raum)
+	var debuet_raeume: Array = []
+	if debuet != "":
+		var kandidaten: Array = []
+		for i in gen.raeume.size():
+			if i != gen.start_raum and i != gen.reaktor_raum:
+				kandidaten.append(i)
+		var wie_viele := 1 if (debuet == "drohne" or debuet in Gegner.EINZELGAENGER) else 2
+		for k in mini(wie_viele, kandidaten.size()):
+			debuet_raeume.append(kandidaten.pop_at(_rng.randi_range(0, kandidaten.size() - 1)))
+		var info: Array = Gegner.EINFUEHRUNG[debuet]
+		neuer_gegner = "NEUER GEGNER: %s — %s" % [info[1], info[2]]
+	Protokoll.schreib("level", "Besetzung Tiefe %d: neu %s, frisch %s, dazu %s" % [tiefe, debuet if debuet != "" else "—", frisch, besetzung.slice(frisch.size())])
 	var einzel := {"dieb": 0, "reparierer": 0, "nest": 0}
-	var einzel_ab := {"dieb": 6, "reparierer": 7, "nest": 4}
+	# Drohnenschwarm ab Tiefe 10, höchstens einer je Raum und wenige je Mine (Stev 2026-10-11)
+	var schwaerme := 0
+	schwarm_je_raum.clear()
+	var schwarm_max := 0 if tiefe <= Gegner.EINFUEHRUNG["drohne"][0] else (1 if tiefe <= 12 else (2 if tiefe < 20 else 3))
 	boss = null
 	for i in gen.raeume.size():
 		if i == gen.start_raum:
 			continue
 		var zellen := gen.zellen_von_raum(i)
-		var n := _rng.randi_range(1, mini(2 + tiefe / 2, 7))
-		if i == gen.reaktor_raum:
-			n += 2
-		n = horde_anzahl(n)
-		for j in n:
-			var pos := LevelGen.welt_von(zellen[_rng.randi_range(0, zellen.size() - 1)])
-			pos += Vector3(_rng.randf_range(-1.5, 1.5), _rng.randf_range(-1.0, 1.0), _rng.randf_range(-1.5, 1.5))
-			if i == gen.reaktor_raum and pos.distance_to(reaktor.position) < 4.5:
-				pos = reaktor.position + (pos - reaktor.position).normalized() * 4.5
-			_gegner(pool[_rng.randi_range(0, pool.size() - 1)], pos)
-			zahl += 1
-		# Einzelgänger
-		for typ in einzel:
-			var ab: int = einzel_ab[typ]
-			if tiefe >= ab and einzel[typ] < 2 and _rng.randf() < 0.15:
-				einzel[typ] += 1
-				_gegner(typ, LevelGen.welt_von(zellen[_rng.randi_range(0, zellen.size() - 1)]))
+		var zufall_zelle := func() -> Vector3: return LevelGen.welt_von(zellen[_rng.randi_range(0, zellen.size() - 1)])
+		if i in debuet_raeume:
+			if debuet == "drohne":
+				zahl += _schwarm(zufall_zelle.call())
+				schwarm_je_raum[i] = schwarm_je_raum.get(i, 0) + 1
+			else:
+				_gegner(debuet, zufall_zelle.call())
 				zahl += 1
-		# Schwarm: fünf Drohnen zusammen
-		if tiefe >= 3 and i != gen.reaktor_raum and _rng.randf() < 0.25:
-			var mitte := LevelGen.welt_von(zellen[_rng.randi_range(0, zellen.size() - 1)])
-			var schwarm := horde_anzahl(5)
-			for k in schwarm:
-				_gegner("drohne", mitte + Vector3(_rng.randf_range(-2, 2), _rng.randf_range(-1, 1), _rng.randf_range(-2, 2)))
-			zahl += schwarm
+				if debuet in einzel:
+					einzel[debuet] += 1
+		else:
+			var n := _rng.randi_range(1, mini(2 + tiefe / 2, 7))
+			if i == gen.reaktor_raum:
+				n += 2
+			n = horde_anzahl(n)
+			for j in n:
+				var pos: Vector3 = zufall_zelle.call()
+				pos += Vector3(_rng.randf_range(-1.5, 1.5), _rng.randf_range(-1.0, 1.0), _rng.randf_range(-1.5, 1.5))
+				if i == gen.reaktor_raum and pos.distance_to(reaktor.position) < 4.5:
+					pos = reaktor.position + (pos - reaktor.position).normalized() * 4.5
+				_gegner(pool[_rng.randi_range(0, pool.size() - 1)], pos)
+				zahl += 1
+			# Einzelgänger (höchstens 2 je Mine); das Nest nie zusammen mit einem Schwarm im selben Raum
+			var nest_hier := false
+			for typ in einzel:
+				var ab: int = Gegner.EINFUEHRUNG[typ][0]
+				if tiefe > ab and einzel[typ] < 2 and _rng.randf() < 0.15:
+					einzel[typ] += 1
+					_gegner(typ, zufall_zelle.call())
+					zahl += 1
+					nest_hier = nest_hier or typ == "nest"
+			if schwaerme < schwarm_max and not nest_hier and i != gen.reaktor_raum and _rng.randf() < 0.25:
+				schwaerme += 1
+				zahl += _schwarm(zufall_zelle.call())
+				schwarm_je_raum[i] = schwarm_je_raum.get(i, 0) + 1
 		# Kristalle: in jedem Raum mit 20 %, in der Kristallader mit 60 %
 		if _rng.randf() < (0.6 if thema.name.begins_with("Kristallader") else 0.2):
 			level.add_child(Beute.neu("kristall", LevelGen.welt_von(zellen[_rng.randi_range(0, zellen.size() - 1)])))
@@ -316,6 +353,14 @@ func _gegner_setzen() -> int:
 		_boss_setzen()
 		zahl += 1
 	return zahl
+
+
+## Schwarm: drei Drohnen zusammen (Stev 2026-10-11: fünf waren „zu viele“). Gibt die Zahl zurück.
+func _schwarm(mitte: Vector3) -> int:
+	var schwarm := horde_anzahl(3)
+	for k in schwarm:
+		_gegner("drohne", mitte + Vector3(_rng.randf_range(-2, 2), _rng.randf_range(-1, 1), _rng.randf_range(-2, 2)))
+	return schwarm
 
 
 ## Jede 5. Tiefe: einer von drei Bossen im Wechsel bewacht den Reaktor, der bis dahin geschirmt ist.
@@ -963,6 +1008,10 @@ func _autotest() -> void:
 		await _geschoss_schau()
 		get_tree().quit(0)
 		return
+	if "--besetzung-test" in OS.get_cmdline_user_args():
+		_besetzung_test()
+		get_tree().quit(0)
+		return
 	if "--tasten-test" in OS.get_cmdline_user_args():
 		await _tasten_test()
 		get_tree().quit(0)
@@ -1476,15 +1525,11 @@ func _controller_test() -> void:
 	erg.append("Zielhilfe: Drehung %.0f°/s bei 30 %% Stick, %.0f°/s bei vollem Stick; Drohne 4° neben dem Fadenkreuz in 10 m (freie Sicht %s): Schaden ohne Hilfe %.0f, mit Hilfe %.0f" % [
 		raten[0], raten[1], sicht, treffer[false], treffer[true]])
 	ok = ok and treffer[true] > treffer[false]
-	# 3c) Leitstrahl mit Select aus und wieder an; aus zeigt einen Hinweis statt still zu verschwinden
+	# 3c) Leitstrahl: ab Werk keine Taste (Stev 2026-10-11) — Select schaltet ihn nicht mehr aus
 	await _knopf_druck(JOY_BUTTON_BACK)
-	var leit_aus := not leitstrahl and not hud.leit_an
-	await _warte(0.2)
-	_foto("controller_leitstrahl_aus")
-	await _knopf_druck(JOY_BUTTON_BACK)
-	var leit_wieder := leitstrahl and hud.leit_an
-	erg.append("Leitstrahl: Select aus %s, wieder an %s" % [leit_aus, leit_wieder])
-	ok = ok and leit_aus and leit_wieder
+	var leit_bleibt := leitstrahl and hud.leit_an
+	erg.append("Leitstrahl: Select lässt ihn an %s" % leit_bleibt)
+	ok = ok and leit_bleibt
 	# 4) Pause (Start), Optionen per Steuerkreuz + A, zurück mit B, weiter mit Start
 	await _knopf_druck(JOY_BUTTON_START)
 	var pausiert := get_tree().paused
@@ -1767,6 +1812,53 @@ func _geschoss_schau() -> void:
 
 
 ## Tastenbelegung: Anzeige, Umbelegen über die Optionen (echter Tastendruck), Tausch, Speichern/Laden, Standard.
+## Gegner-Einführung (Stev 2026-10-11): je Tiefe 1–25 zwölf Minen besetzen und zählen, wer vorkommt.
+func _besetzung_test() -> void:
+	var ok := true
+	var tiefe_merken := tiefe
+	for t in range(1, 26):
+		tiefe = t
+		var arten := {}
+		var arten_je_mine := 0
+		var max_schwarm_raum := 0
+		var max_schwaerme_mine := 0
+		var debuet_n: Array[int] = []
+		var debuet := ""
+		for typ in Gegner.EINFUEHRUNG:
+			if Gegner.EINFUEHRUNG[typ][0] == t and t > 1:
+				debuet = typ
+		for saat in 12:
+			gen.erzeuge(9000 + saat * 31 + t, t)
+			reaktor.position = gen.mitte(gen.reaktor_raum)
+			_rng.seed = 777 + saat
+			_gegner_setzen()
+			var hier := {}
+			for g in get_tree().get_nodes_in_group("gegner"):
+				if not g.ist_boss and g.get_meta("nest", 0) == 0:
+					hier[g.typ] = hier.get(g.typ, 0) + 1
+				g.free()
+			for typ in hier:
+				arten[typ] = arten.get(typ, 0) + hier[typ]
+			arten_je_mine += hier.size()
+			for r in schwarm_je_raum:
+				max_schwarm_raum = maxi(max_schwarm_raum, schwarm_je_raum[r])
+			max_schwaerme_mine = maxi(max_schwaerme_mine, schwarm_je_raum.size())
+			if debuet != "":
+				debuet_n.append(hier.get(debuet, 0))
+		hud.boss_aus()
+		var zu_frueh: Array = arten.keys().filter(func(typ): return Gegner.EINFUEHRUNG.has(typ) and Gegner.EINFUEHRUNG[typ][0] > t)
+		var gut := zu_frueh.is_empty() and max_schwarm_raum <= 1 and (t >= 10 or not arten.has("drohne"))
+		if debuet != "":
+			var soll := 3 if debuet == "drohne" else (1 if debuet in Gegner.EINZELGAENGER else 2)
+			gut = gut and debuet_n.all(func(n): return n == soll)
+		ok = ok and gut
+		Protokoll.schreib("test", "Besetzung %s Tiefe %2d: neu %-14s je Mine %.1f Arten, Schwärme je Mine ≤%d, je Raum ≤%d, Arten %s%s" % [
+			"ok  " if gut else "FEHL", t, (debuet + " " + str(debuet_n)) if debuet != "" else "—", arten_je_mine / 12.0,
+			max_schwaerme_mine, max_schwarm_raum, arten, (" ZU FRÜH %s" % [zu_frueh]) if not zu_frueh.is_empty() else ""])
+	tiefe = tiefe_merken
+	Protokoll.schreib("test", "BESETZUNG-TEST %s" % ("BESTANDEN" if ok else "FEHLGESCHLAGEN"))
+
+
 func _tasten_test() -> void:
 	var erg: Array[String] = []
 	var ok := true
@@ -1776,6 +1868,29 @@ func _tasten_test() -> void:
 	Eingabe.zuruecksetzen()
 	ok = pruef.call("Anzeige", Eingabe.text_fuer("notfallschild") == "R" and Eingabe.text_fuer("runter") == "Strg / C" and Eingabe.text_fuer("feuer") == "Linke Maustaste",
 		"Notfallschild „%s“, Runter „%s“, Laser „%s“" % [Eingabe.text_fuer("notfallschild"), Eingabe.text_fuer("runter"), Eingabe.text_fuer("feuer")]) and ok
+	# Leitstrahl ab Werk unbelegt (Stev 2026-10-11), auch nicht am Controller; alte Dateien mit Tab werden umgestellt
+	var tab := InputEventKey.new()
+	tab.physical_keycode = KEY_TAB
+	var sel := InputEventJoypadButton.new()
+	sel.button_index = JOY_BUTTON_BACK
+	ok = pruef.call("Leitstrahl unbelegt", InputMap.action_get_events("leitstrahl").is_empty() and not InputMap.event_is_action(tab, "leitstrahl") and not InputMap.event_is_action(sel, "leitstrahl"),
+		"Belegung „%s“, Ereignisse %d" % [Eingabe.text_fuer("leitstrahl"), InputMap.action_get_events("leitstrahl").size()]) and ok
+	var alt_datei := ConfigFile.new()
+	alt_datei.set_value("tasten", "leitstrahl", ["taste:%d" % KEY_TAB])
+	alt_datei.set_value("tasten", "licht", ["taste:%d" % KEY_L])
+	alt_datei.save(Eingabe._datei)
+	Eingabe.laden()
+	ok = pruef.call("Alte Belegung umgestellt", Eingabe.text_fuer("leitstrahl") == "—" and Eingabe.text_fuer("licht") == "L",
+		"Leitstrahl „%s“ (soll —), eigene Taste Scheinwerfer „%s“ bleibt" % [Eingabe.text_fuer("leitstrahl"), Eingabe.text_fuer("licht")]) and ok
+	Eingabe.belegen("leitstrahl", tab)
+	var neu_datei := ConfigFile.new()
+	neu_datei.load(Eingabe._datei)
+	for a in Eingabe._standard:
+		Eingabe._setze_pc(a, Eingabe._standard[a])
+	Eingabe.laden()
+	ok = pruef.call("Leitstrahl selbst belegbar", Eingabe.text_fuer("leitstrahl") == "Tab" and neu_datei.get_value("stand", "fassung", 1) == 2,
+		"nach Belegen und Neuladen „%s“, Fassung %s" % [Eingabe.text_fuer("leitstrahl"), neu_datei.get_value("stand", "fassung", 1)]) and ok
+	Eingabe.zuruecksetzen()
 	# Optionen öffnen, Knopf „Notfallschild“ drücken, dann G auf der Tastatur
 	_zeige_hangar()
 	await _warte(0.3)
@@ -2094,6 +2209,9 @@ func _gegner_schau2() -> void:
 		schiff.global_position += Vector3(0, 1.4, 0) + vor * 0.8
 		schiff.look_at(g.global_position, Vector3.UP)
 		await _warte(0.8)
+		if typ == "drohne":       # Schussfarbe mit aufs Bild (gelb, nicht Augenfarbe)
+			g._schiessen()
+			await _warte(0.08)
 		_foto("neu_%s" % typ)
 		schiff.global_transform = start
 		hud.boss_aus()

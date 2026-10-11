@@ -15,6 +15,7 @@ const BELEGBAR := [
 ]
 var _standard := {}          ## Aktion -> Liste der PC-Ereignisse ab Werk
 var _datei := "user://abstieg_tasten.cfg"
+const FASSUNG := 2           ## 2: Leitstrahl ab Werk unbelegt (2026-10-11)
 
 
 func _ready() -> void:
@@ -32,7 +33,8 @@ func _ready() -> void:
 	_aktion("blick_runter", [], [], [[JOY_AXIS_RIGHT_Y, 1.0]])
 	_aktion("feuer", [], [], [[JOY_AXIS_TRIGGER_RIGHT, 1.0]], [MOUSE_BUTTON_LEFT])
 	_aktion("rakete", [], [], [[JOY_AXIS_TRIGGER_LEFT, 1.0]], [MOUSE_BUTTON_RIGHT])
-	_aktion("leitstrahl", [KEY_TAB], [JOY_BUTTON_BACK], [])
+	# Stev 2026-10-11: ab Werk unbelegt, man kam dauernd versehentlich auf Tab/Select. Belegbar in den Optionen.
+	_aktion("leitstrahl", [], [], [])
 	_aktion("licht", [KEY_F], [JOY_BUTTON_Y], [])
 	_aktion("pause", [KEY_ESCAPE], [JOY_BUTTON_START], [])
 	_aktion("nachbrenner", [KEY_SHIFT], [JOY_BUTTON_X], [])
@@ -115,6 +117,7 @@ func speichern() -> void:
 		for e in pc_ereignisse(b[0]):
 			liste.append(("taste:%d" % e.physical_keycode) if e is InputEventKey else ("maus:%d" % e.button_index))
 		c.set_value("tasten", b[0], liste)
+	c.set_value("stand", "fassung", FASSUNG)
 	c.save(_datei)
 
 
@@ -122,8 +125,12 @@ func laden() -> void:
 	var c := ConfigFile.new()
 	if c.load(_datei) != OK:
 		return
+	var fassung: int = c.get_value("stand", "fassung", 1)
 	for b in BELEGBAR:
 		var liste: Array = c.get_value("tasten", b[0], [])
+		# Fassung 1 speicherte den alten Standard Tab für den Leitstrahl mit — der soll jetzt unbelegt sein
+		if fassung < 2 and b[0] == "leitstrahl" and liste == ["taste:%d" % KEY_TAB]:
+			continue
 		if liste.is_empty():
 			continue
 		var ereignisse := []
