@@ -26,6 +26,9 @@ var touch_empfindlichkeit := 1.0   ## Faktor auf die Drehung beim Wischen (Optio
 var _standard_pad := {}      ## Aktion -> Liste der Controller-Ereignisse (Knöpfe, Trigger) ab Werk
 var _datei := "user://abstieg_tasten.cfg"
 const FASSUNG := 2           ## 2: Leitstrahl ab Werk unbelegt (2026-10-11)
+## Nur diese Anzeigeserver kennen die Tastaturbelegung (keyboard_get_keycode_from_physical). Web, headless und
+## Android schreiben sonst je Aufruf „Not supported“ in die Konsole und liefern ohnehin KEY_NONE.
+const LAYOUT_SERVER := ["X11", "Wayland", "Windows", "macOS"]
 
 
 func _ready() -> void:
@@ -269,7 +272,7 @@ func text_fuer(aktion: String) -> String:
 	var teile: Array[String] = []
 	for e in pc_ereignisse(aktion):
 		if e is InputEventKey:
-			var k: Key = DisplayServer.keyboard_get_keycode_from_physical(e.physical_keycode)
+			var k: Key = DisplayServer.keyboard_get_keycode_from_physical(e.physical_keycode) if DisplayServer.get_name() in LAYOUT_SERVER else KEY_NONE
 			var n := OS.get_keycode_string(k if k != KEY_NONE else e.physical_keycode)
 			teile.append(NAMEN.get(n, n))
 		else:

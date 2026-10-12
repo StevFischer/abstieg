@@ -407,7 +407,9 @@ func _boss_setzen() -> void:
 	Protokoll.schreib("level", "Boss %s auf Tiefe %d, Leben %.0f, Raum %s" % [boss.boss_name(), tiefe, boss.hp, r.groesse])
 
 
-func _gegner(typ: String, pos: Vector3) -> Gegner:
+## sofort: Prüfstände wollen den Gegner gleich im Baum (look_at, global_position), auch wenn sie
+## nach `await physics_frame` weiterlaufen — dort gilt Engine.is_in_physics_frame(), sonst würde verzögert eingehängt.
+func _gegner(typ: String, pos: Vector3, sofort := false) -> Gegner:
 	var g := Gegner.new()
 	g.einrichten(typ, tiefe)
 	# Pakt: zähere Gegner, schnellere Schüsse, wütende Bosse
@@ -433,7 +435,7 @@ func _gegner(typ: String, pos: Vector3) -> Gegner:
 	g.phase_zwei.connect(func(b: Gegner):
 		hud.mitteilung("%s — PHASE 2" % b.boss_name(), 1.8, HUD.ROT)
 		Protokoll.schreib("level", "Boss %s Phase 2" % b.boss_name()))
-	if Engine.is_in_physics_frame():      # aus einem Gegner-Physikschritt heraus (Bossnachschub)
+	if Engine.is_in_physics_frame() and not sofort:      # aus einem Gegner-Physikschritt heraus (Bossnachschub)
 		level.add_child.call_deferred(g)
 	else:
 		level.add_child(g)
@@ -2699,7 +2701,7 @@ func _gegner_neu_test() -> void:
 
 
 func _testgegner(typ: String, pos: Vector3, physik: bool) -> Gegner:
-	var g := _gegner(typ, pos)
+	var g := _gegner(typ, pos, true)
 	g.look_at(schiff.global_position, Vector3.UP)
 	g.set_physics_process(physik)
 	return g
